@@ -4,8 +4,8 @@ import configService from './configService'
 // Servicio para gestión de datos maestros
 class MasterDataService {
   constructor() {
-    this.initializeDefaultData()
     this.observers = [] // Para notificar cambios a otros procesos
+    this.initializeDefaultData()
   }
 
   // Inicializar datos vacíos si no existen
