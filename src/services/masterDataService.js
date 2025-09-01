@@ -439,6 +439,135 @@ class MasterDataService {
     return Array.from(paymentCalculations.values())
   }
 
+  // Calcular pagos por trabajador agrupados por mes
+  calculateMonthlyWorkerPayments(workerId = null) {
+    const shifts = this.getWorkerShifts()
+    const workers = this.getWorkers()
+    const calendarConfig = this.getCalendarConfig()
+    
+    // Validación defensiva para la configuración del calendario
+    if (!calendarConfig || !calendarConfig.holidays || !Array.isArray(calendarConfig.holidays)) {
+      console.warn('Configuración de calendario corrupta en calculateMonthlyWorkerPayments, restableciendo configuración por defecto')
+      const defaultConfig = this.getDefaultCalendarConfig()
+      this.saveCalendarConfig(defaultConfig)
+      return this.calculateMonthlyWorkerPayments(workerId)
+    }
+    
+    const monthlyPayments = new Map() // Formato: 'conductor|YYYY-MM' => datos
+
+    shifts.forEach(shift => {
+      // Si se especifica un workerId, filtrar solo esos turnos
+      if (workerId && shift.conductorNombre !== workerId) return
+
+      const conductorNombre = shift.conductorNombre
+      const fecha = shift.fecha
+      const turno = this.getTurnoNumber(shift.turno)
+      const tarifa = this.calculateShiftRate(fecha, turno)
+
+      // Obtener año-mes de la fecha
+      const yearMonth = fecha.substring(0, 7) // 'YYYY-MM'
+      const monthKey = `${conductorNombre}|${yearMonth}`
+
+      // Determinar tipo de día
+      const dateObj = new Date(fecha + 'T00:00:00')
+      const dayOfWeek = dateObj.getDay()
+      const isHoliday = calendarConfig.holidays.includes(fecha)
+      const isSunday = dayOfWeek === 0
+
+      if (!monthlyPayments.has(monthKey)) {
+        monthlyPayments.set(monthKey, {
+          conductorNombre,
+          yearMonth,
+          monthName: dateObj.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' }),
+          totalTurnos: 0,
+          totalMonto: 0,
+          feriadosTrabajados: 0,
+          domingosTrabajados: 0,
+          turnos: [],
+          desglosePorTipo: {
+            'PRIMER TURNO': { cantidad: 0, monto: 0 },
+            'SEGUNDO TURNO': { cantidad: 0, monto: 0 },
+            'TERCER TURNO': { cantidad: 0, monto: 0 }
+          },
+          desglosePorDia: {
+            'Días normales': { cantidad: 0, monto: 0 },
+            'Sábados 3er turno': { cantidad: 0, monto: 0 },
+            'Feriados': { cantidad: 0, monto: 0 },
+            'Domingos': { cantidad: 0, monto: 0 }
+          }
+        })
+      }
+
+      const calculation = monthlyPayments.get(monthKey)
+      calculation.totalTurnos++
+      calculation.totalMonto += tarifa
+
+      // Contar feriados y domingos
+      if (isHoliday && !isSunday) calculation.feriadosTrabajados++
+      if (isSunday) calculation.domingosTrabajados++
+
+      // Determinar categoría de día para desglose
+      let categoriasDia = 'Días normales'
+      if (isSunday) {
+        categoriasDia = 'Domingos'
+      } else if (isHoliday) {
+        categoriasDia = 'Feriados'
+      } else if (dayOfWeek === 6 && turno === 3) {
+        categoriasDia = 'Sábados 3er turno'
+      }
+
+      calculation.turnos.push({
+        fecha,
+        turno: shift.turno,
+        tarifa,
+        isHoliday,
+        isSunday,
+        dayOfWeek,
+        categoriasDia
+      })
+
+      // Actualizar desglose por tipo
+      if (calculation.desglosePorTipo[shift.turno]) {
+        calculation.desglosePorTipo[shift.turno].cantidad++
+        calculation.desglosePorTipo[shift.turno].monto += tarifa
+      }
+
+      // Actualizar desglose por día
+      if (calculation.desglosePorDia[categoriasDia]) {
+        calculation.desglosePorDia[categoriasDia].cantidad++
+        calculation.desglosePorDia[categoriasDia].monto += tarifa
+      }
+    })
+
+    // Agrupar resultados por conductor y mes
+    const result = new Map()
+    
+    monthlyPayments.forEach((monthData) => {
+      const { conductorNombre } = monthData
+      
+      if (!result.has(conductorNombre)) {
+        result.set(conductorNombre, {
+          conductorNombre,
+          months: [],
+          totalGeneral: 0,
+          totalTurnosGeneral: 0
+        })
+      }
+      
+      const workerData = result.get(conductorNombre)
+      workerData.months.push(monthData)
+      workerData.totalGeneral += monthData.totalMonto
+      workerData.totalTurnosGeneral += monthData.totalTurnos
+    })
+
+    // Ordenar meses dentro de cada trabajador
+    result.forEach(workerData => {
+      workerData.months.sort((a, b) => a.yearMonth.localeCompare(b.yearMonth))
+    })
+
+    return Array.from(result.values())
+  }
+
   // Convertir tipo de turno a número
   getTurnoNumber(turnoString) {
     if (!turnoString) return 1

@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Upload, FileText, CheckCircle, Database, Trash2, AlertCircle, Users, Route, Clock, Calendar, TrendingUp, AlertTriangle } from 'lucide-react'
 import { useState, useRef } from 'react'
 import masterDataService from '@/services/masterDataService'
+import excelValidationService from '@/services/excelValidationService'
+import inconsistenciesService from '@/services/inconsistenciesService'
 import * as XLSX from 'xlsx'
 
 const UploadFiles = () => {
@@ -12,6 +14,7 @@ const UploadFiles = () => {
   const [uploadStatus, setUploadStatus] = useState(null)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [processedResults, setProcessedResults] = useState([])
+  const [validationMode, setValidationMode] = useState('default') // Nueva configuración
   const fileInputRef = useRef(null)
 
   // Función auxiliar para convertir fechas de Excel a JavaScript
@@ -20,7 +23,7 @@ const UploadFiles = () => {
     return new Date(epoch.getTime() + (excelDate - 2) * 24 * 60 * 60 * 1000);
   };
 
-  // Función para procesar archivos Excel de planillas de turnos
+  // Función para procesar archivos Excel de planillas de turnos - NUEVA VERSIÓN CON VALIDACIÓN ROBUSTA
   const processExcelFile = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
@@ -30,15 +33,32 @@ const UploadFiles = () => {
           const data = new Uint8Array(e.target.result)
           const workbook = XLSX.read(data, { type: 'array' })
           
-          // Procesar la primera hoja
+          // Procesar la primera hoja usando el nuevo servicio de validación
           const sheetName = workbook.SheetNames[0]
           const worksheet = workbook.Sheets[sheetName]
           
-          // Analizar y procesar los datos usando la nueva lógica
-          const processedData = analyzeExcelTurnos(worksheet, file.name)
+          console.log(`📋 Procesando archivo con validación robusta: ${file.name}`)
+          console.log(`🔧 Modo de validación: ${validationMode}`)
+          
+          // Usar el nuevo servicio de validación con configuración seleccionada
+          const processedData = excelValidationService.validateAndCorrectExcel(worksheet, file.name, validationMode)
+          
+          // Agregar información adicional de procesamiento
+          processedData.sheetName = sheetName
+          processedData.processingMode = 'robust-validation'
+          
+          console.log(`✅ Archivo procesado con validación robusta:`, {
+            archivo: file.name,
+            errores: processedData.errors.length,
+            advertencias: processedData.warnings.length,
+            correcciones: processedData.correctionLog?.length || 0,
+            turnos: processedData.turnos.length
+          })
+          
           resolve(processedData)
           
         } catch (error) {
+          console.error(`❌ Error procesando archivo ${file.name}:`, error)
           reject(new Error(`Error procesando archivo ${file.name}: ${error.message}`))
         }
       }
@@ -376,7 +396,7 @@ const UploadFiles = () => {
 
   // Función para calcular el resumen total
   const calculateTotalSummary = () => {
-    return processedResults.reduce((total, result) => {
+    const summary = processedResults.reduce((total, result) => {
       return {
         files: total.files + 1,
         totalShifts: total.totalShifts + (result.summary?.totalTurnos || 0),
@@ -399,12 +419,39 @@ const UploadFiles = () => {
       servicesWithoutDriverCount: 0,
       shiftTypeBreakdown: { 'PRIMER TURNO': 0, 'SEGUNDO TURNO': 0, 'TERCER TURNO': 0 }
     })
+
+    // Calcular turnos que se van a importar (solo archivos válidos)
+    const validResults = processedResults.filter(result => result.errors.length === 0)
+    const turnosToImport = validResults.reduce((total, result) => {
+      if (result.turnos && Array.isArray(result.turnos)) {
+        return total + result.turnos.reduce((turnoSum, turno) => {
+          return turnoSum + (turno.conductoresAsignados?.length || 0)
+        }, 0)
+      }
+      return total
+    }, 0)
+
+    const totalCorrections = processedResults.reduce((total, result) => {
+      return total + (result.correctionLog?.length || 0)
+    }, 0)
+
+    summary.turnosToImport = turnosToImport
+    summary.totalCorrections = totalCorrections
+    summary.validFiles = validResults.length
+    summary.invalidFiles = processedResults.length - validResults.length
+
+    return summary
   }
 
   // Función para confirmar importación
   const confirmImport = async () => {
     try {
+      console.log('📋 Iniciando confirmación de importación...')
+      console.log('📊 Resultados procesados:', processedResults)
+      
       const validResults = processedResults.filter(result => result.errors.length === 0)
+      
+      console.log('✅ Resultados válidos:', validResults.length, 'de', processedResults.length)
       
       if (validResults.length === 0) {
         setUploadStatus({ type: 'error', message: 'No hay archivos válidos para importar' })
@@ -414,40 +461,122 @@ const UploadFiles = () => {
 
       // Procesar y guardar los turnos en masterDataService
       const allShifts = []
+      let totalCorrectionsMade = 0
       
-      validResults.forEach(result => {
-        result.turnos.forEach(turno => {
-          // Crear un registro de turno por cada conductor asignado
-          turno.conductoresAsignados.forEach(conductorNombre => {
-            allShifts.push({
-              fecha: turno.fecha,
-              turno: turno.turno,
-              conductorNombre: conductorNombre,
-              cantidadEsperada: turno.cantidadEsperada,
-              archivo: result.fileName,
-              fechaImportacion: new Date().toISOString()
-            })
+      validResults.forEach((result, resultIndex) => {
+        console.log(`📂 Procesando archivo ${resultIndex + 1}: ${result.fileName}`)
+        console.log(`📊 Estructura del resultado:`, result)
+        console.log(`📊 Turnos encontrados:`, result.turnos?.length || 0)
+        console.log(`🔧 Correcciones aplicadas:`, result.correctionLog?.length || 0)
+        
+        // Desglose detallado de turnos si existen
+        if (result.turnos && result.turnos.length > 0) {
+          console.log(`📝 Primeros 3 turnos:`, result.turnos.slice(0, 3))
+          result.turnos.forEach((turno, idx) => {
+            if (idx < 3) { // Solo los primeros 3 para no saturar
+              console.log(`  📅 Turno ${idx + 1}:`, {
+                fecha: turno.fecha,
+                turno: turno.turno,
+                conductores: turno.conductoresAsignados,
+                cantidad: turno.cantidadEsperada
+              })
+            }
           })
-        })
+        } else {
+          console.warn(`⚠️ No hay turnos en este archivo`)
+        }
+        
+        if (result.correctionLog) {
+          totalCorrectionsMade += result.correctionLog.length
+        }
+        
+        if (result.turnos && Array.isArray(result.turnos)) {
+          result.turnos.forEach((turno, turnoIndex) => {
+            console.log(`  🔄 Procesando turno ${turnoIndex + 1}:`, turno)
+            
+            // Crear un registro de turno por cada conductor asignado
+            if (turno.conductoresAsignados && Array.isArray(turno.conductoresAsignados)) {
+              turno.conductoresAsignados.forEach(conductorNombre => {
+                allShifts.push({
+                  fecha: turno.fecha,
+                  turno: turno.turno,
+                  conductorNombre: conductorNombre,
+                  cantidadEsperada: turno.cantidadEsperada,
+                  archivo: result.fileName,
+                  fechaImportacion: new Date().toISOString(),
+                  validationMode: result.configurationUsed || 'default',
+                  correctionApplied: result.correctionLog?.length > 0
+                })
+              })
+            } else {
+              console.warn(`⚠️ Turno sin conductores asignados válidos:`, turno)
+            }
+          })
+        } else {
+          console.warn(`⚠️ Archivo sin turnos válidos:`, result.fileName)
+        }
       })
+
+      console.log('💾 Total de turnos a guardar:', allShifts.length)
+      console.log('📝 Muestra de turnos:', allShifts.slice(0, 3))
 
       // Guardar en masterDataService
       if (allShifts.length > 0) {
         masterDataService.addWorkerShifts(allShifts)
+        console.log('✅ Turnos guardados exitosamente en masterDataService')
+      } else {
+        console.warn('⚠️ No se encontraron turnos para guardar')
       }
+
+      // Generar reportes de inconsistencias para cada archivo procesado
+      console.log('📝 Generando reportes de inconsistencias...')
+      for (const result of processedResults) {
+        try {
+          const processStats = {
+            turnosImported: allShifts.filter(shift => shift.archivo === result.fileName).length,
+            totalTurnosInFile: result.turnos ? result.turnos.length : 0,
+            totalCorrections: result.correctionLog ? result.correctionLog.length : 0
+          }
+          
+          const fileReport = inconsistenciesService.generateFileReport(
+            result.fileName,
+            result,
+            processStats
+          )
+          
+          await inconsistenciesService.updateInconsistencies(fileReport)
+          console.log(`📊 Reporte de inconsistencias generado para: ${result.fileName}`)
+        } catch (error) {
+          console.error(`❌ Error generando reporte para ${result.fileName}:`, error)
+        }
+      }
+
+      // Crear mensaje detallado de éxito
+      const successMessage = [
+        `✅ Importación completada exitosamente:`,
+        `📂 ${validResults.length} archivo(s) procesado(s)`,
+        `👥 ${allShifts.length} turno(s) importado(s)`,
+        totalCorrectionsMade > 0 ? `🔧 ${totalCorrectionsMade} corrección(es) automática(s) aplicada(s)` : null
+      ].filter(Boolean).join(' | ')
 
       setUploadStatus({ 
         type: 'success', 
-        message: `Se procesaron ${validResults.length} archivo(s) y se guardaron ${allShifts.length} turnos exitosamente.` 
+        message: successMessage
       })
+      
       setShowConfirmModal(false)
       setProcessedResults([])
+      
       // Limpiar el input de archivo después de importar exitosamente
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
+      
+      console.log('🎉 Proceso de importación completado')
+      
     } catch (error) {
-      setUploadStatus({ type: 'error', message: error.message })
+      console.error('❌ Error en confirmImport:', error)
+      setUploadStatus({ type: 'error', message: `Error en importación: ${error.message}` })
     }
   }
 
@@ -485,7 +614,8 @@ const UploadFiles = () => {
     setIsClearing(true)
     try {
       await masterDataService.resetAllData()
-      setUploadStatus({ type: 'success', message: 'Todos los datos han sido eliminados exitosamente' })
+      await inconsistenciesService.clearInconsistencies()
+      setUploadStatus({ type: 'success', message: 'Todos los datos e inconsistencias han sido eliminados exitosamente' })
     } catch (error) {
       setUploadStatus({ type: 'error', message: `Error eliminando datos: ${error.message}` })
     } finally {
@@ -537,6 +667,30 @@ const UploadFiles = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Selector de modo de validación */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Modo de Validación
+              </label>
+              <select 
+                value={validationMode} 
+                onChange={(e) => setValidationMode(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={isProcessing}
+              >
+                <option value="default">Estándar - Validación equilibrada con correcciones automáticas</option>
+                <option value="permissive">Permisivo - Acepta y corrige la mayoría de errores</option>
+                <option value="strict">Estricto - Rechaza archivos con cualquier inconsistencia</option>
+                <option value="legacy">Planillas Antiguas - Para formatos no estándar</option>
+              </select>
+              <p className="text-xs text-gray-500">
+                {validationMode === 'default' && '✅ Modo recomendado para la mayoría de casos'}
+                {validationMode === 'permissive' && '🔧 Ideal para archivos con errores menores frecuentes'}
+                {validationMode === 'strict' && '⚠️ Solo archivos perfectamente formateados'}
+                {validationMode === 'legacy' && '📄 Para archivos con formatos antiguos o variantes'}
+              </p>
+            </div>
+            
             <input
               ref={fileInputRef}
               type="file"
@@ -602,49 +756,54 @@ const UploadFiles = () => {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
                 <Card>
                   <CardContent className="p-4 text-center">
-                    <Users className="h-8 w-8 mx-auto mb-2 text-blue-600" />
-                    <div className="text-2xl font-bold">{summary.uniqueWorkers}</div>
-                    <div className="text-sm text-gray-600">Únicos</div>
+                    <FileText className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+                    <div className="text-2xl font-bold text-blue-600">{summary.validFiles}</div>
+                    <div className="text-sm text-gray-600">Válidos</div>
+                    {summary.invalidFiles > 0 && (
+                      <div className="text-xs text-red-500 mt-1">{summary.invalidFiles} con errores</div>
+                    )}
                   </CardContent>
                 </Card>
                 
                 <Card>
                   <CardContent className="p-4 text-center">
-                    <Route className="h-8 w-8 mx-auto mb-2 text-green-600" />
-                    <div className="text-2xl font-bold">{summary.routes}</div>
-                    <div className="text-sm text-gray-600">Rutas</div>
+                    <Users className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                    <div className="text-2xl font-bold text-green-600">{summary.turnosToImport}</div>
+                    <div className="text-sm text-gray-600">Turnos a importar</div>
                   </CardContent>
                 </Card>
                 
                 <Card>
                   <CardContent className="p-4 text-center">
-                    <Clock className="h-8 w-8 mx-auto mb-2 text-purple-600" />
-                    <div className="text-2xl font-bold">{summary.totalShifts}</div>
-                    <div className="text-sm text-gray-600">Turnos</div>
+                    <Users className="h-8 w-8 mx-auto mb-2 text-purple-600" />
+                    <div className="text-2xl font-bold text-purple-600">{summary.uniqueWorkers}</div>
+                    <div className="text-sm text-gray-600">Conductores únicos</div>
+                  </CardContent>
+                </Card>
+
+                {summary.totalCorrections > 0 && (
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <CheckCircle className="h-8 w-8 mx-auto mb-2 text-orange-600" />
+                      <div className="text-2xl font-bold text-orange-600">{summary.totalCorrections}</div>
+                      <div className="text-sm text-gray-600">Correcciones aplicadas</div>
+                    </CardContent>
+                  </Card>
+                )}
+                
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <Route className="h-8 w-8 mx-auto mb-2 text-indigo-600" />
+                    <div className="text-2xl font-bold text-indigo-600">{summary.routes}</div>
+                    <div className="text-sm text-gray-600">Fechas</div>
                   </CardContent>
                 </Card>
                 
                 <Card>
                   <CardContent className="p-4 text-center">
-                    <FileText className="h-8 w-8 mx-auto mb-2 text-orange-600" />
-                    <div className="text-2xl font-bold">{summary.files}</div>
-                    <div className="text-sm text-gray-600">Archivos</div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <TrendingUp className="h-8 w-8 mx-auto mb-2 text-indigo-600" />
-                    <div className="text-2xl font-bold">{summary.totalWorkerShifts}</div>
-                    <div className="text-sm text-gray-600">Total Turnos Trabajados</div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-red-600" />
-                    <div className="text-2xl font-bold">{summary.servicesWithoutDriverCount}</div>
-                    <div className="text-sm text-gray-600">Servicios Sin Conductor</div>
+                    <Clock className="h-8 w-8 mx-auto mb-2 text-gray-600" />
+                    <div className="text-2xl font-bold text-gray-600">{summary.totalShifts}</div>
+                    <div className="text-sm text-gray-600">Eventos de turno</div>
                   </CardContent>
                 </Card>
               </div>
@@ -695,11 +854,55 @@ const UploadFiles = () => {
                 {processedResults.map((result, index) => (
                   <Card key={index} className="border-l-4 border-l-blue-500">
                     <CardContent className="p-4">
-                      <h4 className="font-semibold mb-2">{result.fileName}</h4>
+                      <h4 className="font-semibold mb-2 flex items-center justify-between">
+                        <span>{result.fileName}</span>
+                        <div className="flex items-center space-x-2">
+                          {result.configurationUsed && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                              Config: {result.configurationUsed}
+                            </span>
+                          )}
+                          {result.processingMode === 'robust-validation' && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                              Validación Robusta
+                            </span>
+                          )}
+                        </div>
+                      </h4>
+                      
+                      {/* Mostrar estadísticas de procesamiento */}
+                      {result.correctionLog && result.correctionLog.length > 0 && (
+                        <div className="mb-3 p-3 bg-blue-50 rounded-lg">
+                          <div className="text-blue-700 font-medium text-sm">
+                            ✨ Correcciones Automáticas Aplicadas: {result.correctionLog.length}
+                          </div>
+                          <details className="mt-2">
+                            <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-800">
+                              Ver detalles de correcciones
+                            </summary>
+                            <div className="mt-2 space-y-1 text-xs">
+                              {result.correctionLog.slice(0, 10).map((correction, i) => (
+                                <div key={i} className="p-2 bg-white rounded border">
+                                  <strong>{correction.message}:</strong>
+                                  <br />
+                                  <span className="text-gray-600">
+                                    Original: "{correction.data.original}" → Corregido: "{correction.data.corrected}"
+                                  </span>
+                                </div>
+                              ))}
+                              {result.correctionLog.length > 10 && (
+                                <div className="text-gray-500 italic">
+                                  ... y {result.correctionLog.length - 10} correcciones más
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        </div>
+                      )}
                       
                       {result.errors.length > 0 && (
                         <div className="mb-2">
-                          <div className="text-red-600 font-medium">Errores:</div>
+                          <div className="text-red-600 font-medium">❌ Errores:</div>
                           <ul className="list-disc list-inside text-sm text-red-600">
                             {result.errors.map((error, i) => (
                               <li key={i}>{error}</li>
@@ -710,11 +913,46 @@ const UploadFiles = () => {
                       
                       {result.warnings.length > 0 && (
                         <div className="mb-2">
-                          <div className="text-yellow-600 font-medium">Advertencias:</div>
-                          <div className="text-sm text-yellow-600">
-                            Se encontraron {result.warnings.length} advertencias
-                          </div>
+                          <div className="text-yellow-600 font-medium">⚠️ Advertencias:</div>
+                          <details className="text-sm text-yellow-600">
+                            <summary className="cursor-pointer hover:text-yellow-800">
+                              {result.warnings.length} advertencias encontradas (click para expandir)
+                            </summary>
+                            <ul className="list-disc list-inside mt-2 space-y-1">
+                              {result.warnings.map((warning, i) => (
+                                <li key={i}>{warning}</li>
+                              ))}
+                            </ul>
+                          </details>
                         </div>
+                      )}
+
+                      {/* Mostrar logs de procesamiento si están disponibles */}
+                      {result.processingLog && result.processingLog.length > 0 && (
+                        <details className="mt-3">
+                          <summary className="text-xs text-gray-600 cursor-pointer hover:text-gray-800">
+                            📋 Ver log completo de procesamiento ({result.processingLog.length} entradas)
+                          </summary>
+                          <div className="mt-2 max-h-40 overflow-y-auto border rounded p-2 bg-gray-50">
+                            {result.processingLog.map((log, i) => (
+                              <div key={i} className="text-xs mb-1 p-1 border-b border-gray-200">
+                                <span className={`font-medium ${
+                                  log.level === 'error' ? 'text-red-600' :
+                                  log.level === 'warning' ? 'text-yellow-600' :
+                                  'text-gray-600'
+                                }`}>
+                                  [{log.level.toUpperCase()}]
+                                </span>
+                                <span className="ml-2">{log.message}</span>
+                                {log.data && Object.keys(log.data).length > 0 && (
+                                  <div className="ml-4 text-gray-500">
+                                    {JSON.stringify(log.data, null, 2)}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </details>
                       )}
                     </CardContent>
                   </Card>
@@ -780,6 +1018,16 @@ const UploadFiles = () => {
                                       <div className="flex flex-wrap gap-1">
                                         {stats.fechas.map((fecha, fechaIdx) => {
                                           const fechaObj = new Date(fecha + 'T00:00:00');
+                                          
+                                          // Verificar si la fecha es válida
+                                          if (isNaN(fechaObj.getTime())) {
+                                            return (
+                                              <span key={fechaIdx} className="inline-block px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs">
+                                                ❌ Fecha inválida
+                                              </span>
+                                            );
+                                          }
+                                          
                                           return (
                                             <span key={fechaIdx} className="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
                                               {fechaObj.toLocaleDateString('es-ES', { 

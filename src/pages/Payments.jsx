@@ -19,13 +19,18 @@ import {
 
 function Payments() {
   const [workerPayments, setWorkerPayments] = useState([])
+  const [monthlyPayments, setMonthlyPayments] = useState([])
+  const [viewMode, setViewMode] = useState('total') // 'total' o 'monthly'
   const [expandedWorkers, setExpandedWorkers] = useState(new Set())
+  const [expandedMonths, setExpandedMonths] = useState(new Set())
   const [lastUpdate, setLastUpdate] = useState(null)
 
   // Cargar datos de pagos
   const loadPaymentData = () => {
     const payments = masterDataService.calculateWorkerPayments()
+    const monthlyData = masterDataService.calculateMonthlyWorkerPayments()
     setWorkerPayments(payments)
+    setMonthlyPayments(monthlyData)
     setLastUpdate(new Date())
   }
 
@@ -46,6 +51,12 @@ function Payments() {
   // Formatear fecha
   const formatDate = (dateString) => {
     const date = new Date(dateString + 'T00:00:00')
+    
+    // Verificar si la fecha es válida
+    if (isNaN(date.getTime())) {
+      return 'Fecha inválida'
+    }
+    
     return date.toLocaleDateString('es-CL', { 
       weekday: 'long',
       year: 'numeric', 
@@ -63,6 +74,17 @@ function Payments() {
       newExpanded.add(workerName)
     }
     setExpandedWorkers(newExpanded)
+  }
+
+  // Expandir/contraer detalles del mes
+  const toggleMonthExpansion = (monthKey) => {
+    const newExpanded = new Set(expandedMonths)
+    if (newExpanded.has(monthKey)) {
+      newExpanded.delete(monthKey)
+    } else {
+      newExpanded.add(monthKey)
+    }
+    setExpandedMonths(newExpanded)
   }
 
   // Cálculos para estadísticas
@@ -350,6 +372,34 @@ function Payments() {
         </div>
       </div>
 
+      {/* Selector de Vista */}
+      <div className="flex justify-center">
+        <div className="bg-gray-100 p-1 rounded-lg">
+          <div className="flex">
+            <button
+              onClick={() => setViewMode('total')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                viewMode === 'total'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Vista Total
+            </button>
+            <button
+              onClick={() => setViewMode('monthly')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                viewMode === 'monthly'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Desglose Mensual
+            </button>
+          </div>
+        </div>
+      </div>
+
       {workerPayments.length === 0 ? (
         /* Estado vacío */
         <Card className="text-center py-12">
@@ -366,8 +416,11 @@ function Payments() {
         </Card>
       ) : (
         <>
-          {/* Resumen general */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+          {viewMode === 'total' ? (
+            /* Vista Total - Código existente */
+            <>
+              {/* Resumen general */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
@@ -764,6 +817,185 @@ function Payments() {
               </CardContent>
             </Card>
           </div>
+            </>
+          ) : (
+            /* Vista Mensual */
+            <>
+              {/* Resumen general mensual */}
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-blue-600" />
+                  Desglose Mensual de Pagos
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-600">Total General</p>
+                          <p className="text-xl font-bold text-green-600">
+                            {formatCurrency(monthlyPayments.reduce((sum, worker) => sum + worker.totalGeneral, 0))}
+                          </p>
+                        </div>
+                        <DollarSign className="h-6 w-6 text-green-600" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-600">Trabajadores</p>
+                          <p className="text-xl font-bold text-blue-600">{monthlyPayments.length}</p>
+                        </div>
+                        <Users className="h-6 w-6 text-blue-600" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-600">Meses con datos</p>
+                          <p className="text-xl font-bold text-purple-600">
+                            {[...new Set(monthlyPayments.flatMap(worker => worker.months.map(m => m.yearMonth)))].length}
+                          </p>
+                        </div>
+                        <Calendar className="h-6 w-6 text-purple-600" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Lista de trabajadores con desglose mensual */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-blue-600" />
+                    Pagos por Trabajador - Desglose Mensual
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {monthlyPayments.map((worker) => (
+                      <div key={worker.conductorNombre} className="border border-gray-200 rounded-lg overflow-hidden">
+                        {/* Header del trabajador */}
+                        <div className="bg-gray-50 p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900">{worker.conductorNombre}</h3>
+                              <p className="text-sm text-gray-600">
+                                {worker.totalTurnosGeneral} turnos trabajados en {worker.months.length} mes(es)
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-gray-600">Total General</p>
+                              <p className="text-2xl font-bold text-green-600">{formatCurrency(worker.totalGeneral)}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Desglose por mes */}
+                        <div className="p-4">
+                          <div className="space-y-3">
+                            {worker.months.map((month) => {
+                              const monthKey = `${worker.conductorNombre}-${month.yearMonth}`
+                              const isExpanded = expandedMonths.has(monthKey)
+                              
+                              return (
+                                <div key={month.yearMonth} className="border border-gray-100 rounded-lg">
+                                  {/* Header del mes */}
+                                  <div 
+                                    className="p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                                    onClick={() => toggleMonthExpansion(monthKey)}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <ChevronDown 
+                                          className={`h-4 w-4 text-gray-400 transition-transform ${
+                                            isExpanded ? 'rotate-180' : ''
+                                          }`} 
+                                        />
+                                        <span className="font-medium text-gray-900">{month.monthName}</span>
+                                        <span className="text-sm text-gray-500">({month.totalTurnos} turnos)</span>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="font-semibold text-green-600">{formatCurrency(month.totalMonto)}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Detalles expandidos del mes */}
+                                  {isExpanded && (
+                                    <div className="px-3 pb-3 border-t border-gray-100">
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                                        {/* Desglose por tipo de turno */}
+                                        <div>
+                                          <h4 className="text-sm font-medium text-gray-700 mb-2">Por Tipo de Turno</h4>
+                                          <div className="space-y-1">
+                                            {Object.entries(month.desglosePorTipo).map(([tipo, data]) => (
+                                              data.cantidad > 0 && (
+                                                <div key={tipo} className="flex justify-between text-sm">
+                                                  <span className="text-gray-600">{tipo} ({data.cantidad})</span>
+                                                  <span className="font-medium">{formatCurrency(data.monto)}</span>
+                                                </div>
+                                              )
+                                            ))}
+                                          </div>
+                                        </div>
+
+                                        {/* Desglose por tipo de día */}
+                                        <div>
+                                          <h4 className="text-sm font-medium text-gray-700 mb-2">Por Tipo de Día</h4>
+                                          <div className="space-y-1">
+                                            {Object.entries(month.desglosePorDia).map(([tipo, data]) => (
+                                              data.cantidad > 0 && (
+                                                <div key={tipo} className="flex justify-between text-sm">
+                                                  <span className="text-gray-600">{tipo} ({data.cantidad})</span>
+                                                  <span className="font-medium">{formatCurrency(data.monto)}</span>
+                                                </div>
+                                              )
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Información adicional */}
+                                      {(month.feriadosTrabajados > 0 || month.domingosTrabajados > 0) && (
+                                        <div className="mt-3 pt-3 border-t border-gray-100">
+                                          <div className="flex gap-4 text-xs text-gray-600">
+                                            {month.feriadosTrabajados > 0 && (
+                                              <span className="flex items-center gap-1">
+                                                <Gift className="h-3 w-3" />
+                                                {month.feriadosTrabajados} feriados
+                                              </span>
+                                            )}
+                                            {month.domingosTrabajados > 0 && (
+                                              <span className="flex items-center gap-1">
+                                                <Star className="h-3 w-3" />
+                                                {month.domingosTrabajados} domingos
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </>
       )}
     </div>

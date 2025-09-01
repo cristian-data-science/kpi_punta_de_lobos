@@ -8,6 +8,7 @@ import Workers from './pages/Workers'
 import Vehicles from './pages/Vehicles'
 import RoutesPage from './pages/Routes'
 import Payments from './pages/Payments'
+import Inconsistencies from './pages/Inconsistencies'
 import Calendar from './pages/Calendar'
 import Settings from './pages/Settings'
 import { Truck } from 'lucide-react'
@@ -54,6 +55,7 @@ const AppRoutes = () => {
         <Route path="vehicles" element={<Vehicles />} />
         <Route path="routes" element={<RoutesPage />} />
         <Route path="payments" element={<Payments />} />
+        <Route path="inconsistencies" element={<Inconsistencies />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="settings" element={<Settings />} />
       </Route>
