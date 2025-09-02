@@ -19,26 +19,255 @@ import {
 
 function Payments() {
   const [workerPayments, setWorkerPayments] = useState([])
-  const [monthlyPayments, setMonthlyPayments] = useState([])
-  const [viewMode, setViewMode] = useState('total') // 'total' o 'monthly'
   const [expandedWorkers, setExpandedWorkers] = useState(new Set())
-  const [expandedMonths, setExpandedMonths] = useState(new Set())
   const [lastUpdate, setLastUpdate] = useState(null)
+  
+  // Estados para el filtro de mes
+  const [viewMode, setViewMode] = useState('total') // 'total' o 'monthly'
+  const [selectedMonth, setSelectedMonth] = useState('') // Mes seleccionado para filtrar
+  const [filteredPayments, setFilteredPayments] = useState([])
 
-  // Cargar datos de pagos
+  // Cargar datos de pagos - SOLO VISTA TOTAL
   const loadPaymentData = () => {
     const payments = masterDataService.calculateWorkerPayments()
-    const monthlyData = masterDataService.calculateMonthlyWorkerPayments()
     setWorkerPayments(payments)
-    setMonthlyPayments(monthlyData)
     setLastUpdate(new Date())
+    
+    // Si estamos en modo mensual y hay un mes seleccionado, filtrar
+    if (viewMode === 'monthly' && selectedMonth) {
+      filterPaymentsByMonth(payments, selectedMonth)
+    }
+  }
+
+  // Función para filtrar pagos por mes
+  const filterPaymentsByMonth = (payments, month) => {
+    if (!month || viewMode !== 'monthly') {
+      setFilteredPayments([])
+      return
+    }
+
+    const [year, monthNum] = month.split('-')
+    const filtered = payments.map(worker => {
+      // Filtrar turnos del trabajador por el mes seleccionado
+      const turnosDelMes = worker.turnos.filter(turno => {
+        const turnoDate = new Date(turno.fecha)
+        return turnoDate.getFullYear() === parseInt(year) && 
+               (turnoDate.getMonth() + 1) === parseInt(monthNum)
+      })
+
+      if (turnosDelMes.length === 0) return null
+
+      // Recalcular estadísticas para el mes
+      const totalMonto = turnosDelMes.reduce((sum, turno) => sum + turno.tarifa, 0)
+      const feriadosTrabajados = turnosDelMes.filter(turno => turno.isHoliday && !turno.isSunday).length
+      const domingosTrabajados = turnosDelMes.filter(turno => turno.isSunday).length
+
+      // Recalcular desgloses
+      const desglosePorTipo = {}
+      const desglosePorDia = {}
+
+      turnosDelMes.forEach(turno => {
+        // Por tipo de turno
+        if (!desglosePorTipo[turno.turno]) {
+          desglosePorTipo[turno.turno] = { cantidad: 0, monto: 0 }
+        }
+        desglosePorTipo[turno.turno].cantidad++
+        desglosePorTipo[turno.turno].monto += turno.tarifa
+
+        // Por tipo de día
+        if (!desglosePorDia[turno.categoriasDia]) {
+          desglosePorDia[turno.categoriasDia] = { cantidad: 0, monto: 0 }
+        }
+        desglosePorDia[turno.categoriasDia].cantidad++
+        desglosePorDia[turno.categoriasDia].monto += turno.tarifa
+      })
+
+      return {
+        ...worker,
+        turnos: turnosDelMes,
+        totalTurnos: turnosDelMes.length,
+        totalMonto,
+        feriadosTrabajados,
+        domingosTrabajados,
+        desglosePorTipo,
+        desglosePorDia
+      }
+    }).filter(worker => worker !== null)
+
+    setFilteredPayments(filtered)
+  }
+
+  // Función para obtener los datos actuales (total o filtrados)
+  const getCurrentPaymentsData = () => {
+    return viewMode === 'monthly' && selectedMonth ? filteredPayments : workerPayments
+  }
+
+  // Función para obtener los meses disponibles
+  const getAvailableMonths = () => {
+    const months = new Set()
+    workerPayments.forEach(worker => {
+      worker.turnos.forEach(turno => {
+        const date = new Date(turno.fecha)
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        months.add(monthKey)
+      })
+    })
+    return Array.from(months).sort().reverse() // Más recientes primero
   }
 
   useEffect(() => {
     loadPaymentData()
   }, [])
 
-  // Formatear moneda
+  // Efecto para filtrar cuando cambie el mes seleccionado
+  useEffect(() => {
+    if (viewMode === 'monthly' && selectedMonth) {
+      filterPaymentsByMonth(workerPayments, selectedMonth)
+    } else {
+      setFilteredPayments([])
+    }
+  }, [selectedMonth, viewMode, workerPayments])
+
+  // Función para expandir/colapsar trabajadores
+  const toggleWorkerExpansion = (workerName) => {
+    setExpandedWorkers(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(workerName)) {
+        newSet.delete(workerName)
+      } else {
+        newSet.add(workerName)
+      }
+      return newSet
+    })
+  }
+
+  // Función para expandir/colapsar todos los trabajadores
+  const toggleAllWorkers = () => {
+    const currentData = getCurrentPaymentsData()
+    if (expandedWorkers.size === currentData.length) {
+      setExpandedWorkers(new Set())
+    } else {
+      setExpandedWorkers(new Set(currentData.map(worker => worker.conductorNombre)))
+    }
+  }
+
+  // Funciones para obtener estadísticas (usando datos actuales)
+  const getTotalPayments = () => {
+    const currentData = getCurrentPaymentsData()
+    return currentData.reduce((total, worker) => total + worker.totalMonto, 0)
+  }
+
+  const getTotalShifts = () => {
+    const currentData = getCurrentPaymentsData()
+    return currentData.reduce((total, worker) => total + worker.totalTurnos, 0)
+  }
+
+  const getTotalHolidays = () => {
+    const currentData = getCurrentPaymentsData()
+    return currentData.reduce((total, worker) => total + worker.feriadosTrabajados, 0)
+  }
+
+  const getTotalSundays = () => {
+    const currentData = getCurrentPaymentsData()
+    return currentData.reduce((total, worker) => total + worker.domingosTrabajados, 0)
+  }
+
+  const getAveragePaymentPerWorker = () => {
+    const currentData = getCurrentPaymentsData()
+    if (currentData.length === 0) return 0
+    return getTotalPayments() / currentData.length
+  }
+
+  // Función para detectar problemas con fechas/turnos
+  const getDateWarnings = () => {
+    if (viewMode !== 'monthly' || !selectedMonth) return null
+
+    const [year, monthNum] = selectedMonth.split('-')
+    const monthName = new Date(year, monthNum - 1).toLocaleDateString('es-CL', { 
+      month: 'long', 
+      year: 'numeric' 
+    })
+    
+    // Obtener todos los días del mes (1 al último día)
+    const totalDaysInMonth = new Date(parseInt(year), parseInt(monthNum), 0).getDate()
+    const allDaysInMonth = Array.from({length: totalDaysInMonth}, (_, i) => i + 1)
+    
+    // Obtener todos los turnos del mes de TODOS los trabajadores (no filtrados)
+    const allWorkers = workerPayments
+    const allTurnosInMonth = []
+    
+    allWorkers.forEach(worker => {
+      worker.turnos.forEach(turno => {
+        const turnoDate = new Date(turno.fecha)
+        if (turnoDate.getFullYear() === parseInt(year) && 
+            (turnoDate.getMonth() + 1) === parseInt(monthNum)) {
+          allTurnosInMonth.push({
+            ...turno,
+            day: turnoDate.getDate()
+          })
+        }
+      })
+    })
+
+    // Obtener días que aparecen en registros (tienen al menos una fecha)
+    const daysWithRecords = [...new Set(allTurnosInMonth.map(turno => turno.day))].sort((a, b) => a - b)
+    
+    // Encontrar días completamente faltantes (no aparecen en ningún registro)
+    const missingDays = allDaysInMonth.filter(day => !daysWithRecords.includes(day))
+    
+    // Encontrar días que aparecen en registros pero sin turnos
+    // (esto sería si hay fechas en la BD pero sin turnos, caso raro pero posible)
+    const daysWithoutShifts = daysWithRecords.filter(day => {
+      const turnosForDay = allTurnosInMonth.filter(turno => turno.day === day)
+      return turnosForDay.length === 0
+    })
+
+    // Verificar si hay datos filtrados para mostrar el warning de "sin datos"
+    const currentData = getCurrentPaymentsData()
+    if (currentData.length === 0 && allTurnosInMonth.length > 0) {
+      return {
+        type: 'no-data',
+        message: `No hay turnos para ningún trabajador en ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`
+      }
+    }
+
+    // Warning por días completamente faltantes (prioritario)
+    if (missingDays.length > 0) {
+      const daysList = missingDays.length > 10 
+        ? `${missingDays.slice(0, 10).join(', ')} y ${missingDays.length - 10} más`
+        : missingDays.join(', ')
+      
+      return {
+        type: 'missing-days',
+        message: `Faltan registros para ${missingDays.length} día(s) en ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}: día ${daysList}`,
+        count: missingDays.length,
+        days: missingDays
+      }
+    }
+
+    // Warning por días sin turnos (secundario)
+    if (daysWithoutShifts.length > 0) {
+      return {
+        type: 'days-without-shifts',
+        message: `Hay ${daysWithoutShifts.length} día(s) sin turnos registrados en ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}: día ${daysWithoutShifts.join(', ')}`,
+        count: daysWithoutShifts.length,
+        days: daysWithoutShifts
+      }
+    }
+
+    // Warning si el mes está muy incompleto (menos del 80% de días)
+    const completionRate = (daysWithRecords.length / totalDaysInMonth) * 100
+    if (completionRate < 80) {
+      return {
+        type: 'incomplete-month',
+        message: `El mes ${monthName.charAt(0).toUpperCase() + monthName.slice(1)} está incompleto: solo ${daysWithRecords.length} de ${totalDaysInMonth} días tienen registros (${Math.round(completionRate)}%)`,
+        completionRate: Math.round(completionRate)
+      }
+    }
+
+    return null
+  }
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('es-CL', {
       style: 'currency',
@@ -48,298 +277,274 @@ function Payments() {
     }).format(amount)
   }
 
-  // Formatear fecha
   const formatDate = (dateString) => {
-    const date = new Date(dateString + 'T00:00:00')
-    
-    // Verificar si la fecha es válida
-    if (isNaN(date.getTime())) {
-      return 'Fecha inválida'
-    }
-    
-    return date.toLocaleDateString('es-CL', { 
-      weekday: 'long',
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    })
+    const date = new Date(dateString)
+    return new Intl.DateTimeFormat('es-CL', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short'
+    }).format(date)
   }
 
-  // Expandir/contraer detalles del trabajador
-  const toggleWorkerExpansion = (workerName) => {
-    const newExpanded = new Set(expandedWorkers)
-    if (newExpanded.has(workerName)) {
-      newExpanded.delete(workerName)
-    } else {
-      newExpanded.add(workerName)
-    }
-    setExpandedWorkers(newExpanded)
-  }
-
-  // Expandir/contraer detalles del mes
-  const toggleMonthExpansion = (monthKey) => {
-    const newExpanded = new Set(expandedMonths)
-    if (newExpanded.has(monthKey)) {
-      newExpanded.delete(monthKey)
-    } else {
-      newExpanded.add(monthKey)
-    }
-    setExpandedMonths(newExpanded)
-  }
-
-  // Cálculos para estadísticas
-  const getTotalPayments = () => {
-    if (!workerPayments || !Array.isArray(workerPayments)) return 0
-    return workerPayments.reduce((sum, worker) => sum + (worker?.totalMonto || 0), 0)
-  }
-
-  const getAveragePaymentPerWorker = () => {
-    if (!workerPayments || workerPayments.length === 0) return 0
-    return getTotalPayments() / workerPayments.length
-  }
-
-  const getTotalShifts = () => {
-    if (!workerPayments || !Array.isArray(workerPayments)) return 0
-    return workerPayments.reduce((sum, worker) => sum + (worker?.turnos?.length || 0), 0)
-  }
-
-  const getTotalHolidays = () => {
-    if (!workerPayments || !Array.isArray(workerPayments)) return 0
-    return workerPayments.reduce((sum, worker) => sum + (worker?.feriadosTrabajados || 0), 0)
-  }
-
-  const getTotalSundays = () => {
-    if (!workerPayments || !Array.isArray(workerPayments)) return 0
-    return workerPayments.reduce((sum, worker) => sum + (worker?.domingosTrabajados || 0), 0)
-  }
-
-  // Exportar pagos a Excel con estilos usando ExcelJS
+  // Función para exportar a Excel
   const exportToExcel = async () => {
-    console.log('Iniciando exportToExcel con ExcelJS...')
-    console.log('workerPayments:', workerPayments)
-    
-    if (!workerPayments || workerPayments.length === 0) {
-      alert('No hay datos de pagos para exportar')
-      return
-    }
-
     try {
-      // Crear un nuevo workbook
+      const currentData = getCurrentPaymentsData()
       const workbook = new ExcelJS.Workbook()
-      const worksheet = workbook.addWorksheet('Pagos por Turnos')
+      
+      // HOJA 1: RESUMEN - Nombre corto para evitar truncamiento
+      let sheetTitle = 'Resumen'
+      if (viewMode === 'monthly' && selectedMonth) {
+        const [year, month] = selectedMonth.split('-')
+        // Nombre corto: "Ago 2025" en lugar de "Agosto de 2025"
+        const monthName = new Date(year, month - 1).toLocaleDateString('es-CL', { month: 'short' })
+        // Quitar el punto del final si existe
+        sheetTitle = `${monthName.replace('.', '').charAt(0).toUpperCase() + monthName.replace('.', '').slice(1)} ${year}`
+      }
+      
+      const worksheet = workbook.addWorksheet(sheetTitle)
 
-      // Configurar ancho de columnas
+      // Configurar el encabezado
       worksheet.columns = [
-        { width: 30 }, // Trabajador
-        { width: 15 }, // Fecha
-        { width: 18 }, // Día de la Semana
-        { width: 15 }, // Tipo de Turno
-        { width: 20 }, // Categoría del Día
-        { width: 16 }, // Tarifa
-        { width: 10 }, // Feriado
-        { width: 10 }  // Domingo
+        { header: 'Trabajador', key: 'trabajador', width: 25 },
+        { header: 'Total Turnos', key: 'totalTurnos', width: 15 },
+        { header: 'Feriados', key: 'feriados', width: 12 },
+        { header: 'Domingos', key: 'domingos', width: 12 },
+        { header: 'Total a Pagar', key: 'totalPago', width: 18 }
       ]
 
-      let currentRow = 1
-
-      // Título principal
-      worksheet.mergeCells('A1:H1')
-      const titleCell = worksheet.getCell('A1')
-      titleCell.value = 'REPORTE DE PAGOS POR TURNOS'
-      titleCell.font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FF1F2937' } }
-      titleCell.alignment = { horizontal: 'center', vertical: 'middle' }
-      titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } }
-      titleCell.border = {
-        top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-        bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-        left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-        right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-      }
-      worksheet.getRow(1).height = 35
-
-      currentRow++
-
-      // Subtítulo fecha
-      worksheet.mergeCells(`A${currentRow}:H${currentRow}`)
-      const subtitleCell = worksheet.getCell(`A${currentRow}`)
-      subtitleCell.value = `Fecha de Generación: ${new Date().toLocaleDateString('es-CL')}`
-      subtitleCell.font = { name: 'Arial', size: 11, italic: true, color: { argb: 'FF6B7280' } }
-      subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' }
-      worksheet.getRow(currentRow).height = 20
-
-      currentRow += 2 // Línea vacía
-
-      // Encabezados
-      const headers = ['Trabajador', 'Fecha', 'Día de la Semana', 'Tipo de Turno', 'Categoría del Día', 'Tarifa', 'Feriado', 'Domingo']
-      const headerRow = worksheet.getRow(currentRow)
-      headers.forEach((header, index) => {
-        const cell = headerRow.getCell(index + 1)
-        cell.value = header
-        cell.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } }
-        cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      // Aplicar estilos al encabezado
+      worksheet.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: 'FFFFFF' } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '366092' } }
+        cell.alignment = { vertical: 'middle', horizontal: 'center' }
         cell.border = {
-          top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          top: { style: 'thin', color: { argb: '000000' } },
+          left: { style: 'thin', color: { argb: '000000' } },
+          bottom: { style: 'thin', color: { argb: '000000' } },
+          right: { style: 'thin', color: { argb: '000000' } }
         }
       })
-      worksheet.getRow(currentRow).height = 25
-      currentRow += 2 // Línea vacía después de encabezados
 
-      // Procesar cada trabajador
-      workerPayments.forEach(worker => {
-        if (!worker) return
+      // Agregar datos
+      currentData.forEach((worker, index) => {
+        const row = worksheet.addRow({
+          trabajador: worker.conductorNombre,
+          totalTurnos: worker.totalTurnos,
+          feriados: worker.feriadosTrabajados,
+          domingos: worker.domingosTrabajados,
+          totalPago: worker.totalMonto
+        })
 
-        // Resumen del trabajador
-        worksheet.mergeCells(`A${currentRow}:H${currentRow}`)
-        const workerSummaryCell = worksheet.getCell(`A${currentRow}`)
-        workerSummaryCell.value = `RESUMEN: ${worker.conductorNombre || 'Sin nombre'}`
-        workerSummaryCell.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FF1F2937' } }
-        workerSummaryCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }
-        workerSummaryCell.alignment = { horizontal: 'left', vertical: 'middle' }
-        workerSummaryCell.border = {
-          top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          left: { style: 'thick', color: { argb: 'FFF59E0B' } },
-          right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+        // Alternar colores de fila
+        if (index % 2 === 1) {
+          row.eachCell((cell) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8F9FA' } }
+          })
         }
-        worksheet.getRow(currentRow).height = 22
-        currentRow++
 
-        // Detalles del trabajador
-        const detailRow = worksheet.getRow(currentRow)
-        detailRow.getCell(1).value = `Total Turnos: ${worker.turnos ? worker.turnos.length : 0}`
-        detailRow.getCell(1).font = { name: 'Arial', size: 10, bold: true }
+        // Formatear la columna de dinero
+        row.getCell('totalPago').numFmt = '"$"#,##0'
         
-        detailRow.getCell(2).value = `TOTAL A PAGAR: ${formatCurrency(worker.totalMonto || 0)}`
-        detailRow.getCell(2).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } }
-        detailRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } }
-        detailRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' }
-        detailRow.getCell(2).border = {
-          top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          left: { style: 'thick', color: { argb: 'FF059669' } },
-          right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+        // Aplicar bordes
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'CCCCCC' } },
+            left: { style: 'thin', color: { argb: 'CCCCCC' } },
+            bottom: { style: 'thin', color: { argb: 'CCCCCC' } },
+            right: { style: 'thin', color: { argb: 'CCCCCC' } }
+          }
+        })
+      })
+
+      // Agregar fila de totales
+      const totalRow = worksheet.addRow({
+        trabajador: 'TOTAL',
+        totalTurnos: getTotalShifts(),
+        feriados: getTotalHolidays(),
+        domingos: getTotalSundays(),
+        totalPago: getTotalPayments()
+      })
+
+      // Estilizar fila de totales
+      totalRow.eachCell((cell, colNumber) => {
+        cell.font = { bold: true }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E8F4FD' } }
+        cell.border = {
+          top: { style: 'medium', color: { argb: '366092' } },
+          left: { style: 'thin', color: { argb: '366092' } },
+          bottom: { style: 'medium', color: { argb: '366092' } },
+          right: { style: 'thin', color: { argb: '366092' } }
         }
-        
-        detailRow.getCell(3).value = `Feriados: ${worker.feriadosTrabajados || 0}`
-        detailRow.getCell(3).font = { name: 'Arial', size: 10, bold: true }
-        
-        detailRow.getCell(4).value = `Domingos: ${worker.domingosTrabajados || 0}`
-        detailRow.getCell(4).font = { name: 'Arial', size: 10, bold: true }
-        
-        worksheet.getRow(currentRow).height = 20
-        currentRow += 2 // Línea vacía
+        if (colNumber === 5) { // Columna de total pago
+          cell.numFmt = '"$"#,##0'
+        }
+      })
 
-        // Turnos del trabajador
-        if (worker.turnos && Array.isArray(worker.turnos)) {
-          worker.turnos
-            .sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
-            .forEach(turno => {
-              if (!turno) return
-              
-              const turnoRow = worksheet.getRow(currentRow)
-              const values = [
-                worker.conductorNombre || 'Sin nombre',
-                turno.fecha || '',
-                turno.fecha ? formatDate(turno.fecha) : '',
-                turno.turno || '',
-                turno.categoriasDia || '',
-                turno.tarifa ? formatCurrency(turno.tarifa) : '',
-                turno.isHoliday ? 'SÍ' : 'NO',
-                turno.isSunday ? 'SÍ' : 'NO'
-              ]
-              
-              values.forEach((value, index) => {
-                const cell = turnoRow.getCell(index + 1)
-                cell.value = value
-                cell.font = { name: 'Arial', size: 10, color: { argb: 'FF374151' } }
-                cell.alignment = { horizontal: index === 5 ? 'right' : 'left', vertical: 'middle' }
-                cell.border = { bottom: { style: 'hair', color: { argb: 'FFF3F4F6' } } }
-                
-                // Estilo especial para montos
-                if (index === 5 && value.includes('$')) {
-                  cell.font = { name: 'Arial', size: 10, color: { argb: 'FF059669' }, bold: true }
-                }
-              })
-              
-              worksheet.getRow(currentRow).height = 18
-              currentRow++
+      // HOJA 2: DETALLES - Siempre se crea, tanto para vista total como mensual
+      const detailSheet = workbook.addWorksheet('Detalles')
+        
+        // Configurar columnas del detalle
+        detailSheet.columns = [
+          { header: 'Trabajador', key: 'trabajador', width: 25 },
+          { header: 'Fecha', key: 'fecha', width: 12 },
+          { header: 'Día', key: 'dia', width: 12 },
+          { header: 'Tipo Turno', key: 'tipoTurno', width: 15 },
+          { header: 'Categoría Día', key: 'categoriaDia', width: 18 },
+          { header: 'Tarifa', key: 'tarifa', width: 15 }
+        ]
+
+        // Aplicar estilos al encabezado de detalles
+        detailSheet.getRow(1).eachCell((cell) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFF' } }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '2D5B2D' } }
+          cell.alignment = { vertical: 'middle', horizontal: 'center' }
+          cell.border = {
+            top: { style: 'thin', color: { argb: '000000' } },
+            left: { style: 'thin', color: { argb: '000000' } },
+            bottom: { style: 'thin', color: { argb: '000000' } },
+            right: { style: 'thin', color: { argb: '000000' } }
+          }
+        })
+
+        // Agregar todos los turnos detallados
+        let rowIndex = 2
+        currentData.forEach((worker) => {
+          // Ordenar turnos por fecha
+          const turnosOrdenados = worker.turnos.sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+          
+          turnosOrdenados.forEach((turno) => {
+            const row = detailSheet.addRow({
+              trabajador: worker.conductorNombre,
+              fecha: turno.fecha,
+              dia: formatDate(turno.fecha),
+              tipoTurno: turno.turno,
+              categoriaDia: turno.categoriasDia,
+              tarifa: turno.tarifa
             })
-        }
 
-        currentRow++ // Línea vacía entre trabajadores
-      })
+            // Alternar colores de fila
+            if ((rowIndex - 2) % 2 === 1) {
+              row.eachCell((cell) => {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F0F8F0' } }
+              })
+            }
 
-      // Resumen general
-      worksheet.mergeCells(`A${currentRow}:H${currentRow}`)
-      const generalSummaryCell = worksheet.getCell(`A${currentRow}`)
-      generalSummaryCell.value = 'RESUMEN GENERAL'
-      generalSummaryCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } }
-      generalSummaryCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C3AED' } }
-      generalSummaryCell.alignment = { horizontal: 'center', vertical: 'middle' }
-      generalSummaryCell.border = {
-        top: { style: 'thick', color: { argb: 'FF5B21B6' } },
-        bottom: { style: 'thick', color: { argb: 'FF5B21B6' } },
-        left: { style: 'thick', color: { argb: 'FF5B21B6' } },
-        right: { style: 'thick', color: { argb: 'FF5B21B6' } }
-      }
-      worksheet.getRow(currentRow).height = 30
-      currentRow++
+            // Formatear la columna de tarifa
+            row.getCell('tarifa').numFmt = '"$"#,##0'
+            
+            // Aplicar bordes
+            row.eachCell((cell) => {
+              cell.border = {
+                top: { style: 'thin', color: { argb: 'CCCCCC' } },
+                left: { style: 'thin', color: { argb: 'CCCCCC' } },
+                bottom: { style: 'thin', color: { argb: 'CCCCCC' } },
+                right: { style: 'thin', color: { argb: 'CCCCCC' } }
+              }
+            })
 
-      // Datos del resumen general
-      const summaryData = [
-        ['Total Trabajadores:', workerPayments ? workerPayments.length : 0],
-        ['Total Turnos:', getTotalShifts() || 0],
-        ['TOTAL GENERAL A PAGAR:', formatCurrency(getTotalPayments() || 0)],
-        ['Total Feriados Trabajados:', getTotalHolidays() || 0],
-        ['Total Domingos Trabajados:', getTotalSundays() || 0],
-        ['Promedio por Trabajador:', formatCurrency(getAveragePaymentPerWorker() || 0)]
-      ]
+            // Colorear filas especiales
+            if (turno.isSunday) {
+              row.eachCell((cell) => {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3E8FF' } }
+              })
+            } else if (turno.isHoliday) {
+              row.eachCell((cell) => {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF2F2' } }
+              })
+            } else if (turno.categoriasDia === 'Sábados 3er turno') {
+              row.eachCell((cell) => {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBEB' } }
+              })
+            }
 
-      summaryData.forEach((data, index) => {
-        const row = worksheet.getRow(currentRow)
-        row.getCell(1).value = data[0]
-        row.getCell(2).value = data[1]
-        
-        if (data[0].includes('TOTAL GENERAL A PAGAR:')) {
-          row.getCell(1).font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }
-          row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDC2626' } }
-          row.getCell(2).font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }
-          row.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDC2626' } }
-          worksheet.getRow(currentRow).height = 25
-        } else {
-          row.getCell(1).font = { name: 'Arial', size: 11, bold: true }
-          row.getCell(2).font = { name: 'Arial', size: 11, bold: true }
-          worksheet.getRow(currentRow).height = 20
-        }
-        
-        currentRow++
-      })
+            rowIndex++
+          })
+        })
 
-      // Generar archivo
-      const today = new Date()
-      const dateStr = today.toISOString().split('T')[0]
-      const fileName = `Pagos_Turnos_${dateStr}.xlsx`
+        // Agregar fila de total en detalles
+        const detailTotalRow = detailSheet.addRow({
+          trabajador: '',
+          fecha: '',
+          dia: '',
+          tipoTurno: '',
+          categoriaDia: 'TOTAL GENERAL:',
+          tarifa: getTotalPayments()
+        })
 
-      // Crear buffer y descargar
+        detailTotalRow.eachCell((cell, colNumber) => {
+          cell.font = { bold: true }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E8F5E8' } }
+          cell.border = {
+            top: { style: 'medium', color: { argb: '2D5B2D' } },
+            left: { style: 'thin', color: { argb: '2D5B2D' } },
+            bottom: { style: 'medium', color: { argb: '2D5B2D' } },
+            right: { style: 'thin', color: { argb: '2D5B2D' } }
+          }
+          if (colNumber === 6) { // Columna de tarifa
+            cell.numFmt = '"$"#,##0'
+          }
+        })
+
+      // Generar nombre de archivo dinámico
+      const fileName = viewMode === 'monthly' && selectedMonth 
+        ? `Pagos_${selectedMonth}_${new Date().toLocaleDateString('es-CL').replace(/\//g, '-')}.xlsx`
+        : `Pagos_Turnos_${new Date().toLocaleDateString('es-CL').replace(/\//g, '-')}.xlsx`
+
+      // Generar el archivo
       const buffer = await workbook.xlsx.writeBuffer()
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = fileName
-      a.click()
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      link.click()
       window.URL.revokeObjectURL(url)
-
-      console.log('Excel exportado exitosamente:', fileName)
-      
     } catch (error) {
-      console.error('Error en exportToExcel:', error)
-      alert(`Error al exportar: ${error.message}`)
+      console.error('Error al exportar a Excel:', error)
+      alert('Error al generar el archivo Excel')
     }
+  }
+
+  if (workerPayments.length === 0) {
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Pagos por Turnos</h1>
+            <p className="text-gray-600 mt-2">
+              Cálculo automático de pagos basado en turnos trabajados y tarifas del calendario
+            </p>
+          </div>
+          <Button onClick={loadPaymentData} className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Actualizar
+          </Button>
+        </div>
+
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay datos de turnos</h3>
+            <p className="text-gray-600 mb-4">
+              Para ver los pagos por turnos, primero necesitas registrar turnos en el calendario.
+            </p>
+            <Button 
+              onClick={() => window.location.href = '/calendar'} 
+              className="mr-2"
+            >
+              Ir al Calendario
+            </Button>
+            <Button 
+              onClick={() => window.location.href = '/upload-files'} 
+              variant="outline"
+            >
+              Ir a Subir Archivos
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -363,641 +568,541 @@ function Payments() {
             className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
           >
             <Download className="h-4 w-4" />
-            Exportar Excel
+            Exportar a Excel
           </Button>
           <Button onClick={loadPaymentData} className="flex items-center gap-2">
             <RefreshCw className="h-4 w-4" />
-            Actualizar Cálculos
+            Actualizar
           </Button>
         </div>
       </div>
 
-      {/* Selector de Vista */}
-      <div className="flex justify-center">
-        <div className="bg-gray-100 p-1 rounded-lg">
-          <div className="flex">
-            <button
-              onClick={() => setViewMode('total')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'total'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+      {/* Selector de Vista y Filtro de Mes */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between bg-white p-4 rounded-lg border border-gray-200">
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          {/* Selector de vista */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Vista:</label>
+            <select
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              Vista Total
-            </button>
-            <button
-              onClick={() => setViewMode('monthly')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'monthly'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Desglose Mensual
-            </button>
+              <option value="total">Vista Total</option>
+              <option value="monthly">Por Mes</option>
+            </select>
           </div>
+
+          {/* Selector de mes (solo visible en modo mensual) */}
+          {viewMode === 'monthly' && (
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Mes:</label>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Seleccionar mes...</option>
+                {getAvailableMonths().map(month => {
+                  const [year, monthNum] = month.split('-')
+                  const monthName = new Date(year, monthNum - 1).toLocaleDateString('es-CL', { 
+                    month: 'long', 
+                    year: 'numeric' 
+                  })
+                  return (
+                    <option key={month} value={month}>
+                      {monthName.charAt(0).toUpperCase() + monthName.slice(1)}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+          )}
         </div>
+
+        {/* Información de filtro activo */}
+        {viewMode === 'monthly' && selectedMonth && (
+          <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
+            <Calendar className="h-4 w-4" />
+            <span>
+              Mostrando datos de {(() => {
+                const [year, monthNum] = selectedMonth.split('-')
+                const monthName = new Date(year, monthNum - 1).toLocaleDateString('es-CL', { 
+                  month: 'long', 
+                  year: 'numeric' 
+                })
+                return monthName.charAt(0).toUpperCase() + monthName.slice(1)
+              })()}
+            </span>
+          </div>
+        )}
       </div>
 
-      {workerPayments.length === 0 ? (
-        /* Estado vacío */
-        <Card className="text-center py-12">
-          <CardContent>
-            <DollarSign className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No hay turnos para calcular</h3>
-            <p className="text-gray-500 mb-4">
-              Sube planillas de turnos en la sección "Subir Archivos" para generar los cálculos de pagos automáticamente.
-            </p>
-            <Button variant="outline">
-              Ir a Subir Archivos
-            </Button>
+      {/* Warning de fechas/turnos faltantes */}
+      {(() => {
+        const warning = getDateWarnings()
+        if (!warning) return null
+
+        return (
+          <div className={`p-4 rounded-lg border-l-4 ${
+            warning.type === 'no-data' 
+              ? 'bg-gray-50 border-gray-400 text-gray-700' 
+              : warning.type === 'missing-days'
+              ? 'bg-red-50 border-red-400 text-red-700'
+              : warning.type === 'days-without-shifts'
+              ? 'bg-orange-50 border-orange-400 text-orange-700'
+              : 'bg-yellow-50 border-yellow-400 text-yellow-700'
+          }`}>
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                {warning.type === 'no-data' ? (
+                  <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                  </svg>
+                ) : warning.type === 'missing-days' ? (
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                ) : warning.type === 'days-without-shifts' ? (
+                  <svg className="h-5 w-5 text-orange-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </div>
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-medium">
+                  {warning.type === 'no-data' ? 'Sin datos' : 
+                   warning.type === 'missing-days' ? 'Días faltantes' : 
+                   warning.type === 'days-without-shifts' ? 'Días sin turnos' :
+                   'Mes incompleto'}
+                </p>
+                <p className="text-sm mt-1">
+                  {warning.message}
+                </p>
+                {warning.workers && warning.workers.length > 0 && (
+                  <p className="text-xs mt-2 opacity-75">
+                    Trabajadores: {warning.workers.join(', ')}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Resumen general */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total a Pagar</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {formatCurrency(getTotalPayments())}
+                </p>
+              </div>
+              <DollarSign className="h-8 w-8 text-green-600" />
+            </div>
           </CardContent>
         </Card>
-      ) : (
-        <>
-          {viewMode === 'total' ? (
-            /* Vista Total - Código existente */
-            <>
-              {/* Resumen general */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total a Pagar</p>
-                    <p className="text-2xl font-bold text-green-600">
-                      {formatCurrency(getTotalPayments())}
-                    </p>
-                  </div>
-                  <DollarSign className="h-8 w-8 text-green-600" />
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Trabajadores</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {workerPayments.length}
-                    </p>
-                  </div>
-                  <Users className="h-8 w-8 text-blue-600" />
-                </div>
-              </CardContent>
-            </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Trabajadores</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {getCurrentPaymentsData().length}
+                </p>
+              </div>
+              <Users className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Turnos</p>
-                    <p className="text-2xl font-bold text-orange-600">
-                      {getTotalShifts()}
-                    </p>
-                  </div>
-                  <Clock className="h-8 w-8 text-orange-600" />
-                </div>
-              </CardContent>
-            </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Turnos</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {getTotalShifts()}
+                </p>
+              </div>
+              <Clock className="h-8 w-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Feriados</p>
-                    <p className="text-2xl font-bold text-red-600">
-                      {getTotalHolidays()}
-                    </p>
-                  </div>
-                  <Gift className="h-8 w-8 text-red-600" />
-                </div>
-              </CardContent>
-            </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Feriados</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {getTotalHolidays()}
+                </p>
+              </div>
+              <Gift className="h-8 w-8 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Domingos</p>
-                    <p className="text-2xl font-bold text-purple-600">
-                      {getTotalSundays()}
-                    </p>
-                  </div>
-                  <Star className="h-8 w-8 text-purple-600" />
-                </div>
-              </CardContent>
-            </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Domingos</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {getTotalSundays()}
+                </p>
+              </div>
+              <Star className="h-8 w-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Promedio</p>
-                    <p className="text-2xl font-bold text-indigo-600">
-                      {formatCurrency(getAveragePaymentPerWorker())}
-                    </p>
-                  </div>
-                  <Calculator className="h-8 w-8 text-indigo-600" />
-                </div>
-              </CardContent>
-            </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Promedio</p>
+                <p className="text-2xl font-bold text-indigo-600">
+                  {formatCurrency(getAveragePaymentPerWorker())}
+                </p>
+              </div>
+              <Calculator className="h-8 w-8 text-indigo-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Lista de trabajadores con pagos */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-600" />
+              Pagos por Trabajador ({getCurrentPaymentsData().length})
+            </CardTitle>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={toggleAllWorkers}
+              className="text-xs"
+            >
+              {expandedWorkers.size === getCurrentPaymentsData().length ? 'Colapsar Todo' : 'Expandir Todo'}
+            </Button>
           </div>
-
-          {/* Lista de trabajadores con pagos */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-blue-600" />
-                Pagos por Trabajador
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {workerPayments.map((worker) => {
-                  const isExpanded = expandedWorkers.has(worker.conductorNombre)
-                  
-                  return (
-                    <div key={worker.conductorNombre} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200">
-                      {/* Header del trabajador */}
-                      <div 
-                        className="p-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
-                        onClick={() => toggleWorkerExpansion(worker.conductorNombre)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
-                              {worker.conductorNombre?.charAt(0).toUpperCase() || 'T'}
-                            </div>
-                            <div>
-                              <h3 className="text-lg font-bold text-gray-900">{worker.conductorNombre}</h3>
-                              <div className="flex items-center gap-3 text-xs text-gray-600">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {worker.turnos.length} turnos
-                                </span>
-                                {worker.feriadosTrabajados > 0 && (
-                                  <span className="flex items-center gap-1 text-red-600">
-                                    <Gift className="h-3 w-3" />
-                                    {worker.feriadosTrabajados}
-                                  </span>
-                                )}
-                                {worker.domingosTrabajados > 0 && (
-                                  <span className="flex items-center gap-1 text-purple-600">
-                                    <Star className="h-3 w-3" />
-                                    {worker.domingosTrabajados}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {getCurrentPaymentsData().map((worker) => {
+              const isExpanded = expandedWorkers.has(worker.conductorNombre)
+              
+              return (
+                <div key={worker.conductorNombre} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200">
+                  {/* Header del trabajador */}
+                  <div 
+                    className="p-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
+                    onClick={() => toggleWorkerExpansion(worker.conductorNombre)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
+                          {worker.conductorNombre?.charAt(0).toUpperCase() || 'T'}
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-gray-900">{worker.conductorNombre}</h3>
+                          <div className="flex items-center gap-3 text-xs text-gray-600">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {worker.totalTurnos} turnos
+                            </span>
+                            {worker.feriadosTrabajados > 0 && (
+                              <span className="flex items-center gap-1 text-red-600">
+                                <Gift className="h-3 w-3" />
+                                {worker.feriadosTrabajados} feriados
+                              </span>
+                            )}
+                            {worker.domingosTrabajados > 0 && (
+                              <span className="flex items-center gap-1 text-purple-600">
+                                <Star className="h-3 w-3" />
+                                {worker.domingosTrabajados} domingos
+                              </span>
+                            )}
                           </div>
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <div className="text-xl font-bold text-green-600">
-                                {formatCurrency(worker.totalMonto)}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {formatCurrency(worker.totalMonto / worker.turnos.length)}/turno
-                              </div>
-                            </div>
-                            <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="text-xl font-bold text-green-600">
+                            {formatCurrency(worker.totalMonto)}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {formatCurrency(worker.totalMonto / worker.totalTurnos)}/turno
+                          </div>
+                        </div>
+                        <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vista expandida */}
+                  {isExpanded && (
+                    <div className="p-4 bg-gradient-to-br from-gray-50 to-white border-t border-gray-200">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* Desglose por tipo de turno */}
+                        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <h4 className="font-semibold text-gray-900 text-sm">Desglose por Tipo de Turno</h4>
+                          </div>
+                          <div className="space-y-2">
+                            {Object.entries(worker.desglosePorTipo).map(([tipo, data]) => (
+                              data.cantidad > 0 && (
+                                <div key={tipo} className="group hover:bg-blue-50 transition-colors duration-200 p-2 rounded-lg border border-transparent hover:border-blue-200">
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                          tipo === 'PRIMER TURNO' ? 'bg-emerald-100 text-emerald-700' :
+                                          tipo === 'SEGUNDO TURNO' ? 'bg-blue-100 text-blue-700' :
+                                          'bg-purple-100 text-purple-700'
+                                        }`}>
+                                          {tipo}
+                                        </span>
+                                        <span className="text-sm text-gray-500">{data.cantidad} turnos</span>
+                                      </div>
+                                      <div className="text-xs text-gray-400">
+                                        Total: {formatCurrency(data.monto)}
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-lg font-bold text-gray-900">{formatCurrency(data.monto)}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Desglose por tipo de día */}
+                        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                            <h4 className="font-semibold text-gray-900 text-sm">Desglose por Tipo de Día</h4>
+                          </div>
+                          <div className="space-y-2">
+                            {Object.entries(worker.desglosePorDia).map(([tipo, data]) => (
+                              data.cantidad > 0 && (
+                                <div key={tipo} className="group hover:bg-orange-50 transition-colors duration-200 p-2 rounded-lg border border-transparent hover:border-orange-200">
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                          tipo === 'Domingos' ? 'bg-purple-100 text-purple-700' :
+                                          tipo === 'Feriados' ? 'bg-red-100 text-red-700' :
+                                          tipo === 'Sábados 3er turno' ? 'bg-yellow-100 text-yellow-700' :
+                                          'bg-gray-100 text-gray-700'
+                                        }`}>
+                                          {tipo === 'Domingos' && <Star className="w-3 h-3 mr-1" />}
+                                          {tipo === 'Feriados' && <Gift className="w-3 h-3 mr-1" />}
+                                          {tipo}
+                                        </span>
+                                        <span className="text-sm text-gray-500">{data.cantidad} turnos</span>
+                                      </div>
+                                      <div className="text-xs text-gray-400">
+                                        Total: {formatCurrency(data.monto)}
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-lg font-bold text-gray-900">{formatCurrency(data.monto)}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            ))}
                           </div>
                         </div>
                       </div>
 
-                      {/* Vista expandida */}
-                      {isExpanded && (
-                        <div className="p-4 bg-gradient-to-br from-gray-50 to-white border-t border-gray-200">
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {/* Desglose por tipo de turno */}
-                            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                <h4 className="font-semibold text-gray-900 text-sm">Desglose por Tipo de Turno</h4>
-                              </div>
-                              <div className="space-y-2">
-                                {Object.entries(worker.desglosePorTipo).map(([tipo, data]) => (
-                                  data.cantidad > 0 && (
-                                    <div key={tipo} className="group hover:bg-blue-50 transition-colors duration-200 p-2 rounded-lg border border-transparent hover:border-blue-200">
-                                      <div className="flex justify-between items-start">
-                                        <div className="flex-1">
-                                          <div className="flex items-center gap-2 mb-1">
-                                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                              tipo === 'PRIMER TURNO' ? 'bg-emerald-100 text-emerald-700' :
-                                              tipo === 'SEGUNDO TURNO' ? 'bg-blue-100 text-blue-700' :
-                                              'bg-purple-100 text-purple-700'
-                                            }`}>
-                                              {tipo}
-                                            </span>
-                                            <span className="text-sm text-gray-500">{data.cantidad} turnos</span>
-                                          </div>
-                                          <div className="text-xs text-gray-400">
-                                            Total: {formatCurrency(data.monto)}
-                                          </div>
-                                        </div>
-                                        <div className="text-right">
-                                          <div className="text-lg font-bold text-gray-900">{formatCurrency(data.monto)}</div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Desglose por tipo de día */}
-                            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                                <h4 className="font-semibold text-gray-900 text-sm">Desglose por Tipo de Día</h4>
-                              </div>
-                              <div className="space-y-2">
-                                {Object.entries(worker.desglosePorDia).map(([tipo, data]) => (
-                                  data.cantidad > 0 && (
-                                    <div key={tipo} className="group hover:bg-orange-50 transition-colors duration-200 p-2 rounded-lg border border-transparent hover:border-orange-200">
-                                      <div className="flex justify-between items-start">
-                                        <div className="flex-1">
-                                          <div className="flex items-center gap-2 mb-1">
-                                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                              tipo === 'Domingos' ? 'bg-purple-100 text-purple-700' :
-                                              tipo === 'Feriados' ? 'bg-red-100 text-red-700' :
-                                              tipo === 'Sábados 3er turno' ? 'bg-yellow-100 text-yellow-700' :
-                                              'bg-gray-100 text-gray-700'
-                                            }`}>
-                                              {tipo === 'Domingos' && <Star className="w-3 h-3 mr-1" />}
-                                              {tipo === 'Feriados' && <Gift className="w-3 h-3 mr-1" />}
-                                              {tipo}
-                                            </span>
-                                            <span className="text-sm text-gray-500">{data.cantidad} turnos</span>
-                                          </div>
-                                          <div className="text-xs text-gray-400">
-                                            Total: {formatCurrency(data.monto)}
-                                          </div>
-                                        </div>
-                                        <div className="text-right">
-                                          <div className="text-lg font-bold text-gray-900">{formatCurrency(data.monto)}</div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Lista detallada de turnos */}
-                          <div className="mt-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              <h4 className="font-semibold text-gray-900 text-sm">Turnos Trabajados ({worker.turnos.length})</h4>
-                            </div>
-                            <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-xs">
-                                  <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                                    <tr>
-                                      <th className="text-left py-2 px-3 font-semibold text-gray-700 border-b border-gray-200">Fecha</th>
-                                      <th className="text-left py-2 px-3 font-semibold text-gray-700 border-b border-gray-200">Día</th>
-                                      <th className="text-left py-2 px-3 font-semibold text-gray-700 border-b border-gray-200">Turno</th>
-                                      <th className="text-left py-2 px-3 font-semibold text-gray-700 border-b border-gray-200">Categoría</th>
-                                      <th className="text-right py-2 px-3 font-semibold text-gray-700 border-b border-gray-200">Tarifa</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {worker.turnos
-                                      .sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
-                                      .map((turno, turnoIndex) => (
-                                        <tr key={turnoIndex} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-all duration-200 border-b border-gray-50 last:border-b-0">
-                                          <td className="py-2 px-3 font-medium text-gray-900">{turno.fecha}</td>
-                                          <td className="py-2 px-3">
-                                            <div className="flex items-center gap-1">
-                                              <span className="text-gray-700">{formatDate(turno.fecha)}</span>
-                                              {turno.isSunday && (
-                                                <div className="flex items-center justify-center w-4 h-4 bg-purple-100 rounded-full">
-                                                  <Star className="h-2 w-2 text-purple-600" />
-                                                </div>
-                                              )}
-                                              {turno.isHoliday && !turno.isSunday && (
-                                                <div className="flex items-center justify-center w-4 h-4 bg-red-100 rounded-full">
-                                                  <Gift className="h-2 w-2 text-red-600" />
-                                                </div>
-                                              )}
+                      {/* Lista detallada de turnos */}
+                      <div className="mt-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <h4 className="font-semibold text-gray-900 text-sm">Turnos Trabajados ({worker.totalTurnos})</h4>
+                        </div>
+                        <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                                <tr>
+                                  <th className="text-left py-2 px-3 font-semibold text-gray-700 border-b border-gray-200">Fecha</th>
+                                  <th className="text-left py-2 px-3 font-semibold text-gray-700 border-b border-gray-200">Día</th>
+                                  <th className="text-left py-2 px-3 font-semibold text-gray-700 border-b border-gray-200">Turno</th>
+                                  <th className="text-left py-2 px-3 font-semibold text-gray-700 border-b border-gray-200">Categoría</th>
+                                  <th className="text-right py-2 px-3 font-semibold text-gray-700 border-b border-gray-200">Tarifa</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {worker.turnos
+                                  .sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+                                  .map((turno, turnoIndex) => (
+                                    <tr key={turnoIndex} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-all duration-200 border-b border-gray-50 last:border-b-0">
+                                      <td className="py-2 px-3 font-medium text-gray-900">{turno.fecha}</td>
+                                      <td className="py-2 px-3">
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-gray-700">{formatDate(turno.fecha)}</span>
+                                          {turno.isSunday && (
+                                            <div className="flex items-center justify-center w-4 h-4 bg-purple-100 rounded-full">
+                                              <Star className="h-2 w-2 text-purple-600" />
                                             </div>
-                                          </td>
-                                          <td className="py-2 px-3">
-                                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                              turno.turno === 'PRIMER TURNO' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
-                                              turno.turno === 'SEGUNDO TURNO' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
-                                              'bg-purple-100 text-purple-700 border border-purple-200'
-                                            }`}>
-                                              {turno.turno}
-                                            </span>
-                                          </td>
-                                          <td className="py-2 px-3">
-                                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${
-                                              turno.categoriasDia === 'Domingos' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                              turno.categoriasDia === 'Feriados' ? 'bg-red-50 text-red-700 border-red-200' :
-                                              turno.categoriasDia === 'Sábados 3er turno' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                              'bg-gray-50 text-gray-700 border-gray-200'
-                                            }`}>
-                                              {turno.categoriasDia === 'Domingos' && <Star className="w-2 h-2 mr-1" />}
-                                              {turno.categoriasDia === 'Feriados' && <Gift className="w-2 h-2 mr-1" />}
-                                              {turno.categoriasDia}
-                                            </span>
-                                          </td>
-                                          <td className="py-2 px-3 text-right">
-                                            <span className="inline-flex items-center px-2 py-1 rounded-lg bg-green-50 text-green-700 font-bold text-sm border border-green-200">
-                                              {formatCurrency(turno.tarifa)}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      ))}
-                                  </tbody>
-                                  <tfoot>
-                                    <tr className="bg-gradient-to-r from-green-50 to-emerald-50 border-t-2 border-green-200">
-                                      <td colSpan={4} className="py-4 px-4 text-right font-bold text-gray-900 text-base">
-                                        Total General:
+                                          )}
+                                          {turno.isHoliday && !turno.isSunday && (
+                                            <div className="flex items-center justify-center w-4 h-4 bg-red-100 rounded-full">
+                                              <Gift className="h-2 w-2 text-red-600" />
+                                            </div>
+                                          )}
+                                        </div>
                                       </td>
-                                      <td className="py-4 px-4 text-right">
-                                        <span className="inline-flex items-center px-4 py-2 rounded-lg bg-green-100 text-green-800 font-bold text-lg border-2 border-green-300 shadow-sm">
-                                          {formatCurrency(worker.totalMonto)}
+                                      <td className="py-2 px-3">
+                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                          turno.turno === 'PRIMER TURNO' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                                          turno.turno === 'SEGUNDO TURNO' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                                          'bg-purple-100 text-purple-700 border border-purple-200'
+                                        }`}>
+                                          {turno.turno}
+                                        </span>
+                                      </td>
+                                      <td className="py-2 px-3">
+                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${
+                                          turno.categoriasDia === 'Domingos' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                          turno.categoriasDia === 'Feriados' ? 'bg-red-50 text-red-700 border-red-200' :
+                                          turno.categoriasDia === 'Sábados 3er turno' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                          'bg-gray-50 text-gray-700 border-gray-200'
+                                        }`}>
+                                          {turno.categoriasDia === 'Domingos' && <Star className="w-2 h-2 mr-1" />}
+                                          {turno.categoriasDia === 'Feriados' && <Gift className="w-2 h-2 mr-1" />}
+                                          {turno.categoriasDia}
+                                        </span>
+                                      </td>
+                                      <td className="py-2 px-3 text-right">
+                                        <span className="inline-flex items-center px-2 py-1 rounded-lg bg-green-50 text-green-700 font-bold text-sm border border-green-200">
+                                          {formatCurrency(turno.tarifa)}
                                         </span>
                                       </td>
                                     </tr>
-                                  </tfoot>
-                                </table>
-                              </div>
-                            </div>
+                                  ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-gradient-to-r from-green-50 to-emerald-50 border-t-2 border-green-200">
+                                  <td colSpan={4} className="py-4 px-4 text-right font-bold text-gray-900 text-base">
+                                    Total General:
+                                  </td>
+                                  <td className="py-4 px-4 text-right">
+                                    <span className="inline-flex items-center px-4 py-2 rounded-lg bg-green-100 text-green-800 font-bold text-lg border-2 border-green-300 shadow-sm">
+                                      {formatCurrency(worker.totalMonto)}
+                                    </span>
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Estadísticas adicionales */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-600" />
+              Resumen por Tipo de Turno
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {['PRIMER TURNO', 'SEGUNDO TURNO', 'TERCER TURNO'].map(turnoType => {
+                const currentData = getCurrentPaymentsData()
+                const totalTurnos = currentData.reduce((sum, worker) => 
+                  sum + (worker.desglosePorTipo[turnoType]?.cantidad || 0), 0)
+                const totalMonto = currentData.reduce((sum, worker) => 
+                  sum + (worker.desglosePorTipo[turnoType]?.monto || 0), 0)
+                
+                return (
+                  <div key={turnoType} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <div className="font-medium text-gray-900">{turnoType}</div>
+                      <div className="text-sm text-gray-600">{totalTurnos} turnos trabajados</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-gray-900">{formatCurrency(totalMonto)}</div>
+                      {totalTurnos > 0 && (
+                        <div className="text-xs text-gray-500">
+                          {formatCurrency(totalMonto / totalTurnos)}/turno
                         </div>
                       )}
                     </div>
-                  )
-                })}
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-green-600" />
+              Información del Cálculo
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                <span className="text-sm font-medium text-gray-900">Promedio por trabajador</span>
+                <span className="text-sm text-gray-600">{formatCurrency(getAveragePaymentPerWorker())}</span>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Estadísticas adicionales */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-blue-600" />
-                  Resumen por Tipo de Turno
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {['PRIMER TURNO', 'SEGUNDO TURNO', 'TERCER TURNO'].map(turnoType => {
-                    const totalTurnos = workerPayments.reduce((sum, worker) => 
-                      sum + worker.desglosePorTipo[turnoType].cantidad, 0)
-                    const totalMonto = workerPayments.reduce((sum, worker) => 
-                      sum + worker.desglosePorTipo[turnoType].monto, 0)
-                    
-                    return (
-                      <div key={turnoType} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <div className="font-medium text-gray-900">{turnoType}</div>
-                          <div className="text-sm text-gray-600">{totalTurnos} turnos trabajados</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold text-gray-900">{formatCurrency(totalMonto)}</div>
-                          {totalTurnos > 0 && (
-                            <div className="text-xs text-gray-500">
-                              {formatCurrency(totalMonto / totalTurnos)}/turno
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-green-600" />
-                  Información del Cálculo
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                    <span className="text-sm font-medium text-gray-900">Promedio por trabajador</span>
-                    <span className="text-sm text-gray-600">{formatCurrency(getAveragePaymentPerWorker())}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                    <span className="text-sm font-medium text-gray-900">Total trabajadores activos</span>
-                    <span className="text-sm text-gray-600">{workerPayments.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                    <span className="text-sm font-medium text-gray-900 flex items-center gap-1">
-                      <Gift className="h-4 w-4 text-red-500" />
-                      Total turnos en feriados
-                    </span>
-                    <span className="text-sm text-red-600 font-semibold">{getTotalHolidays()}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                    <span className="text-sm font-medium text-gray-900 flex items-center gap-1">
-                      <Star className="h-4 w-4 text-purple-500" />
-                      Total turnos en domingos
-                    </span>
-                    <span className="text-sm text-purple-600 font-semibold">{getTotalSundays()}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                    <span className="text-sm font-medium text-gray-900">Basado en tarifas del calendario</span>
-                    <span className="text-sm text-green-600">✓ Actualizado</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-            </>
-          ) : (
-            /* Vista Mensual */
-            <>
-              {/* Resumen general mensual */}
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-blue-600" />
-                  Desglose Mensual de Pagos
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600">Total General</p>
-                          <p className="text-xl font-bold text-green-600">
-                            {formatCurrency(monthlyPayments.reduce((sum, worker) => sum + worker.totalGeneral, 0))}
-                          </p>
-                        </div>
-                        <DollarSign className="h-6 w-6 text-green-600" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600">Trabajadores</p>
-                          <p className="text-xl font-bold text-blue-600">{monthlyPayments.length}</p>
-                        </div>
-                        <Users className="h-6 w-6 text-blue-600" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600">Meses con datos</p>
-                          <p className="text-xl font-bold text-purple-600">
-                            {[...new Set(monthlyPayments.flatMap(worker => worker.months.map(m => m.yearMonth)))].length}
-                          </p>
-                        </div>
-                        <Calendar className="h-6 w-6 text-purple-600" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+              <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                <span className="text-sm font-medium text-gray-900">Total trabajadores activos</span>
+                <span className="text-sm text-gray-600">{getCurrentPaymentsData().length}</span>
               </div>
-
-              {/* Lista de trabajadores con desglose mensual */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-blue-600" />
-                    Pagos por Trabajador - Desglose Mensual
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {monthlyPayments.map((worker) => (
-                      <div key={worker.conductorNombre} className="border border-gray-200 rounded-lg overflow-hidden">
-                        {/* Header del trabajador */}
-                        <div className="bg-gray-50 p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h3 className="text-lg font-semibold text-gray-900">{worker.conductorNombre}</h3>
-                              <p className="text-sm text-gray-600">
-                                {worker.totalTurnosGeneral} turnos trabajados en {worker.months.length} mes(es)
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm text-gray-600">Total General</p>
-                              <p className="text-2xl font-bold text-green-600">{formatCurrency(worker.totalGeneral)}</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Desglose por mes */}
-                        <div className="p-4">
-                          <div className="space-y-3">
-                            {worker.months.map((month) => {
-                              const monthKey = `${worker.conductorNombre}-${month.yearMonth}`
-                              const isExpanded = expandedMonths.has(monthKey)
-                              
-                              return (
-                                <div key={month.yearMonth} className="border border-gray-100 rounded-lg">
-                                  {/* Header del mes */}
-                                  <div 
-                                    className="p-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                                    onClick={() => toggleMonthExpansion(monthKey)}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <ChevronDown 
-                                          className={`h-4 w-4 text-gray-400 transition-transform ${
-                                            isExpanded ? 'rotate-180' : ''
-                                          }`} 
-                                        />
-                                        <span className="font-medium text-gray-900">{month.monthName}</span>
-                                        <span className="text-sm text-gray-500">({month.totalTurnos} turnos)</span>
-                                      </div>
-                                      <div className="text-right">
-                                        <p className="font-semibold text-green-600">{formatCurrency(month.totalMonto)}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Detalles expandidos del mes */}
-                                  {isExpanded && (
-                                    <div className="px-3 pb-3 border-t border-gray-100">
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-                                        {/* Desglose por tipo de turno */}
-                                        <div>
-                                          <h4 className="text-sm font-medium text-gray-700 mb-2">Por Tipo de Turno</h4>
-                                          <div className="space-y-1">
-                                            {Object.entries(month.desglosePorTipo).map(([tipo, data]) => (
-                                              data.cantidad > 0 && (
-                                                <div key={tipo} className="flex justify-between text-sm">
-                                                  <span className="text-gray-600">{tipo} ({data.cantidad})</span>
-                                                  <span className="font-medium">{formatCurrency(data.monto)}</span>
-                                                </div>
-                                              )
-                                            ))}
-                                          </div>
-                                        </div>
-
-                                        {/* Desglose por tipo de día */}
-                                        <div>
-                                          <h4 className="text-sm font-medium text-gray-700 mb-2">Por Tipo de Día</h4>
-                                          <div className="space-y-1">
-                                            {Object.entries(month.desglosePorDia).map(([tipo, data]) => (
-                                              data.cantidad > 0 && (
-                                                <div key={tipo} className="flex justify-between text-sm">
-                                                  <span className="text-gray-600">{tipo} ({data.cantidad})</span>
-                                                  <span className="font-medium">{formatCurrency(data.monto)}</span>
-                                                </div>
-                                              )
-                                            ))}
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      {/* Información adicional */}
-                                      {(month.feriadosTrabajados > 0 || month.domingosTrabajados > 0) && (
-                                        <div className="mt-3 pt-3 border-t border-gray-100">
-                                          <div className="flex gap-4 text-xs text-gray-600">
-                                            {month.feriadosTrabajados > 0 && (
-                                              <span className="flex items-center gap-1">
-                                                <Gift className="h-3 w-3" />
-                                                {month.feriadosTrabajados} feriados
-                                              </span>
-                                            )}
-                                            {month.domingosTrabajados > 0 && (
-                                              <span className="flex items-center gap-1">
-                                                <Star className="h-3 w-3" />
-                                                {month.domingosTrabajados} domingos
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </>
-      )}
+              <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                <span className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                  <Gift className="h-4 w-4 text-red-500" />
+                  Total turnos en feriados
+                </span>
+                <span className="text-sm text-red-600 font-semibold">{getTotalHolidays()}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                <span className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                  <Star className="h-4 w-4 text-purple-500" />
+                  Total turnos en domingos
+                </span>
+                <span className="text-sm text-purple-600 font-semibold">{getTotalSundays()}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                <span className="text-sm font-medium text-gray-900">Basado en tarifas del calendario</span>
+                <span className="text-sm text-green-600">✓ Actualizado</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
