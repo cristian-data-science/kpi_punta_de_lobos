@@ -25,6 +25,7 @@ TransApp is a React-based transportation management system for fleet and worker 
 Layout (Header + Sidebar + Outlet)
 ├── Dashboard (main metrics)
 ├── Workers/Vehicles/Routes/Payments (CRUD pages + Excel export)
+│   └── Payments: Total/Monthly filtering with date validation warnings
 ├── UploadFiles (CSV import functionality)
 ├── Calendar (shift management with rate calculations)
 └── Settings (configuration)
@@ -40,6 +41,11 @@ Layout (Header + Sidebar + Outlet)
   - Multiple worksheets support (Summary + Individual breakdowns)
   - Automatic column width adjustment
   - Company branding and metadata
+  - Monthly filtering support with dynamic sheet naming
+- **Sheet Structure**:
+  - **Total View**: "Resumen" + "Detalles" sheets
+  - **Monthly View**: "[Month] [Year]" (e.g., "Ago 2025") + "Detalles" sheets
+- **Monthly Filtering**: `filterPaymentsByMonth()` and `getCurrentPaymentsData()` functions
 
 ### Calendar Integration
 - **Shift Rate Calculation**: Dynamic rates based on day type and shift
@@ -56,6 +62,18 @@ Layout (Header + Sidebar + Outlet)
 - **Features**: Defensive validations, timezone-aware calculations
 - **Breakdown**: Per-shift type and per-day type categorization
 - **Export Ready**: Formatted for Excel with currency and totals
+
+### Date Validation & Warning System
+- **Location**: `src/pages/Payments.jsx` - `getDateWarnings()` function
+- **Purpose**: Detects missing calendar dates and incomplete shift records in monthly view
+- **Warning Types**:
+  - 🔴 **`missing-days`**: Completely missing calendar days (no records at all)
+  - 🟠 **`days-without-shifts`**: Days present in records but without shifts
+  - 🟡 **`incomplete-month`**: Month completion below 80% threshold
+  - ⚪ **`no-data`**: No filtered data available for selected month
+- **Algorithm**: Compares all calendar days (1-31) against actual recorded dates
+- **UI Features**: Color-coded warnings with specific icons and detailed messages
+- **Priority System**: Missing days > Days without shifts > Incomplete month
 
 ## Development Patterns
 
@@ -221,6 +239,14 @@ MasterDataService initializes with empty arrays on first load:
 1. Verify ExcelJS dependency in package.json
 2. Check browser console for export errors
 3. Test with sample data first
+
+### Date Validation Warnings
+**Purpose**: Detect missing calendar dates and incomplete monthly records
+**Implementation**: 
+- `getDateWarnings()` function iterates through all calendar days (1-31)
+- Compares against actual recorded dates to find gaps
+- Prioritizes missing days over incomplete shift data
+- Shows color-coded warnings with specific day numbers
 
 ### Calendar Rate Calculations
 **Critical Rules**: 
