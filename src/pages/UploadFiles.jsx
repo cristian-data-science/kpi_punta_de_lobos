@@ -725,15 +725,16 @@ const UploadFiles = () => {
               onClick={loadDemoData}
               disabled={isLoadingDemo}
               variant="outline"
-              className="w-full"
+              className="w-full h-10 flex items-center justify-center"
             >
+              <Database className="h-4 w-4 mr-2" />
               {isLoadingDemo ? 'Cargando...' : 'Cargar Datos Demo'}
             </Button>
             <Button 
               onClick={clearAllData}
               disabled={isClearing}
               variant="destructive"
-              className="w-full"
+              className="w-full h-10 flex items-center justify-center"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               {isClearing ? 'Eliminando...' : 'Limpiar Todos los Datos'}
@@ -744,7 +745,7 @@ const UploadFiles = () => {
 
       {/* Modal de Confirmación */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-6xl w-full max-h-[95vh] overflow-hidden shadow-2xl border">
             <div className="p-6 border-b bg-white">
               <h2 className="text-xl font-bold">Confirmar Importación</h2>

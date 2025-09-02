@@ -261,12 +261,15 @@ function Cobros() {
 
   // Formatear fecha
   const formatDate = (dateString) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('es-CL', {
+    // Crear fecha en timezone local para evitar problemas de UTC
+    const [year, month, day] = dateString.split('-')
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+    
+    return new Intl.DateTimeFormat('es-CL', {
       weekday: 'short',
       day: 'numeric',
       month: 'short'
-    })
+    }).format(date)
   }
 
   // Exportar a Excel
@@ -283,68 +286,253 @@ function Cobros() {
       // Hoja de resumen
       const summarySheet = workbook.addWorksheet('Resumen de Cobros')
       
-      // Título
+      // Título profesional con gradiente visual
       const titleRow = summarySheet.addRow(['RESUMEN DE COBROS - TRANSAPP'])
-      titleRow.font = { size: 16, bold: true, color: { argb: 'FFFFFF' } }
-      titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '2563EB' } }
+      titleRow.font = { size: 18, bold: true, color: { argb: 'FFFFFF' }, name: 'Arial Black' }
+      titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E3A8A' } }
+      titleRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      titleRow.border = {
+        top: { style: 'thick', color: { argb: '1E40AF' } },
+        left: { style: 'thick', color: { argb: '1E40AF' } },
+        bottom: { style: 'thick', color: { argb: '1E40AF' } },
+        right: { style: 'thick', color: { argb: '1E40AF' } }
+      }
       summarySheet.mergeCells('A1:D1')
+      titleRow.height = 40
       
-      // Información del período
+      // Información del período con estilo empresarial
       const periodInfo = selectedPeriod ? formatPeriodLabel(selectedPeriod) : 'Todos los períodos'
-      summarySheet.addRow(['Período:', periodInfo, '', ''])
-      summarySheet.addRow(['Tarifa por turno:', formatCurrency(tarifaCobro), '', ''])
-      summarySheet.addRow(['Fecha de exportación:', new Date().toLocaleDateString('es-CL'), '', ''])
+      const periodRow = summarySheet.addRow(['Período:', periodInfo, '', ''])
+      periodRow.font = { size: 11, bold: true, color: { argb: '374151' } }
+      periodRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F9FAFB' } }
+      periodRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      periodRow.height = 22
+      
+      const tarifaRow = summarySheet.addRow(['Tarifa por turno:', formatCurrency(tarifaCobro), '', ''])
+      tarifaRow.font = { size: 11, bold: true, color: { argb: '374151' } }
+      tarifaRow.getCell(2).font = { size: 11, bold: true, color: { argb: '059669' } }
+      tarifaRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F9FAFB' } }
+      tarifaRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      tarifaRow.height = 22
+      
+      const fechaRow = summarySheet.addRow(['Fecha de exportación:', new Date().toLocaleDateString('es-CL'), '', ''])
+      fechaRow.font = { size: 11, color: { argb: '6B7280' } }
+      fechaRow.getCell(1).font = { size: 11, bold: true, color: { argb: '374151' } }
+      fechaRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F9FAFB' } }
+      fechaRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      fechaRow.height = 22
+      
       summarySheet.addRow(['']) // Espacio
       
-      // Resumen general
-      summarySheet.addRow(['RESUMEN GENERAL'])
-      summarySheet.addRow(['Total de turnos:', getTotalTurnos()])
-      summarySheet.addRow(['Total a cobrar:', formatCurrency(getTotalCobrar())])
+      // Resumen general con diseño destacado
+      const resumenRow = summarySheet.addRow(['RESUMEN GENERAL'])
+      resumenRow.font = { size: 14, bold: true, color: { argb: 'FFFFFF' } }
+      resumenRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'DC2626' } }
+      resumenRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      resumenRow.border = {
+        top: { style: 'medium', color: { argb: '991B1B' } },
+        left: { style: 'medium', color: { argb: '991B1B' } },
+        bottom: { style: 'medium', color: { argb: '991B1B' } },
+        right: { style: 'medium', color: { argb: '991B1B' } }
+      }
+      resumenRow.height = 28
+      
+      const totalTurnosRow = summarySheet.addRow(['Total de turnos:', getTotalTurnos()])
+      totalTurnosRow.font = { size: 12, bold: true, color: { argb: '1F2937' } }
+      totalTurnosRow.getCell(2).font = { size: 12, bold: true, color: { argb: '7C3AED' } }
+      totalTurnosRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF3F2' } }
+      totalTurnosRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      totalTurnosRow.height = 24
+      
+      const totalCobrarRow = summarySheet.addRow(['Total a cobrar:', formatCurrency(getTotalCobrar())])
+      totalCobrarRow.font = { size: 12, bold: true, color: { argb: '1F2937' } }
+      totalCobrarRow.getCell(2).font = { size: 12, bold: true, color: { argb: '059669' } }
+      totalCobrarRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF3F2' } }
+      totalCobrarRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      totalCobrarRow.height = 24
+      
       summarySheet.addRow(['']) // Espacio
       
-      // Resumen por trabajador
-      summarySheet.addRow(['RESUMEN POR TRABAJADOR'])
+      // Resumen por trabajador con estilo tabla profesional
+      const resumenTrabajadorRow = summarySheet.addRow(['RESUMEN POR TRABAJADOR'])
+      resumenTrabajadorRow.font = { size: 14, bold: true, color: { argb: 'FFFFFF' } }
+      resumenTrabajadorRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '059669' } }
+      resumenTrabajadorRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      resumenTrabajadorRow.border = {
+        top: { style: 'medium', color: { argb: '047857' } },
+        left: { style: 'medium', color: { argb: '047857' } },
+        bottom: { style: 'medium', color: { argb: '047857' } },
+        right: { style: 'medium', color: { argb: '047857' } }
+      }
+      resumenTrabajadorRow.height = 28
+      
       const headerRow = summarySheet.addRow(['Trabajador', 'Turnos', 'Total a Cobrar', 'Tarifa'])
-      headerRow.font = { bold: true }
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3F4F6' } }
+      headerRow.font = { size: 12, bold: true, color: { argb: 'FFFFFF' } }
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '374151' } }
+      headerRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      headerRow.height = 25
       
-      trabajadoresData.forEach(trabajador => {
-        summarySheet.addRow([
+      // Aplicar bordes profesionales a los headers
+      for (let col = 1; col <= 4; col++) {
+        const cell = headerRow.getCell(col)
+        cell.border = {
+          top: { style: 'medium', color: { argb: '1F2937' } },
+          left: { style: 'medium', color: { argb: '1F2937' } },
+          bottom: { style: 'medium', color: { argb: '1F2937' } },
+          right: { style: 'medium', color: { argb: '1F2937' } }
+        }
+      }
+      
+      trabajadoresData.forEach((trabajador, index) => {
+        const dataRow = summarySheet.addRow([
           trabajador.nombre,
           trabajador.turnos,
           formatCurrency(trabajador.totalCobro),
           formatCurrency(tarifaCobro)
         ])
+        
+        // Colores alternados profesionales
+        const bgColor = index % 2 === 0 ? 'FFFFFF' : 'F8FAFC'
+        dataRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } }
+        dataRow.alignment = { horizontal: 'left', vertical: 'middle' }
+        dataRow.height = 22
+        
+        // Estilos específicos por columna
+        for (let col = 1; col <= 4; col++) {
+          const cell = dataRow.getCell(col)
+          
+          switch (col) {
+            case 1: // Trabajador
+              cell.font = { size: 11, bold: true, color: { argb: '1E40AF' } }
+              break
+            case 2: // Turnos
+              cell.font = { size: 11, bold: true, color: { argb: '7C3AED' } }
+              break
+            case 3: // Total a Cobrar
+              cell.font = { size: 11, bold: true, color: { argb: '059669' } }
+              cell.numFmt = '"$"#,##0'
+              break
+            case 4: // Tarifa
+              cell.font = { size: 11, color: { argb: '6B7280' } }
+              cell.numFmt = '"$"#,##0'
+              break
+          }
+          
+          // Bordes elegantes
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'E5E7EB' } },
+            left: { style: 'thin', color: { argb: 'E5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'E5E7EB' } },
+            right: { style: 'thin', color: { argb: 'E5E7EB' } }
+          }
+        }
       })
       
-      // Hoja de detalles
+      // Hoja de detalles con estilo profesional
       const detailSheet = workbook.addWorksheet('Detalle de Turnos')
+      detailSheet.views = [{ showGridLines: false }]
       
-      // Encabezados
+      // Título de la hoja de detalles
+      const detailTitleRow = detailSheet.addRow(['DETALLE COMPLETO DE TURNOS'])
+      detailTitleRow.font = { size: 16, bold: true, color: { argb: 'FFFFFF' } }
+      detailTitleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'DC2626' } }
+      detailTitleRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      detailTitleRow.border = {
+        top: { style: 'thick', color: { argb: 'B91C1C' } },
+        left: { style: 'thick', color: { argb: 'B91C1C' } },
+        bottom: { style: 'thick', color: { argb: 'B91C1C' } },
+        right: { style: 'thick', color: { argb: 'B91C1C' } }
+      }
+      detailSheet.mergeCells('A1:E1')
+      detailTitleRow.height = 35
+      
+      // Espaciado
+      detailSheet.addRow([''])
+      
+      // Encabezados con estilo empresarial
       const detailHeaderRow = detailSheet.addRow(['Fecha', 'Día', 'Trabajador', 'Turno', 'Cobro'])
-      detailHeaderRow.font = { bold: true }
-      detailHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3F4F6' } }
+      detailHeaderRow.font = { size: 12, bold: true, color: { argb: 'FFFFFF' } }
+      detailHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '6B7280' } }
+      detailHeaderRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      detailHeaderRow.height = 26
       
-      // Datos detallados
+      // Aplicar bordes profesionales a los headers de detalles
+      for (let col = 1; col <= 5; col++) {
+        const cell = detailHeaderRow.getCell(col)
+        cell.border = {
+          top: { style: 'medium', color: { argb: '4B5563' } },
+          left: { style: 'medium', color: { argb: '4B5563' } },
+          bottom: { style: 'medium', color: { argb: '4B5563' } },
+          right: { style: 'medium', color: { argb: '4B5563' } }
+        }
+      }
+      
+      // Datos detallados con formato profesional
       currentData
         .sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
-        .forEach(turno => {
-          detailSheet.addRow([
+        .forEach((turno, index) => {
+          const detailRow = detailSheet.addRow([
             turno.fecha,
             formatDate(turno.fecha),
             turno.conductorNombre,
             turno.turno,
             formatCurrency(tarifaCobro)
           ])
+          
+          // Colores alternados elegantes
+          const bgColor = index % 2 === 0 ? 'FFFFFF' : 'F1F5F9'
+          detailRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } }
+          detailRow.alignment = { horizontal: 'left', vertical: 'middle' }
+          detailRow.height = 20
+          
+          // Estilos específicos por columna en detalles
+          for (let col = 1; col <= 5; col++) {
+            const cell = detailRow.getCell(col)
+            
+            switch (col) {
+              case 1: // Fecha
+                cell.font = { size: 10, bold: true, color: { argb: '1F2937' } }
+                break
+              case 2: // Día
+                cell.font = { size: 10, color: { argb: '6366F1' } }
+                break
+              case 3: // Trabajador
+                cell.font = { size: 10, bold: true, color: { argb: '1E40AF' } }
+                break
+              case 4: // Turno
+                cell.font = { size: 10, color: { argb: 'DC2626' } }
+                break
+              case 5: // Cobro
+                cell.font = { size: 10, bold: true, color: { argb: '059669' } }
+                cell.numFmt = '"$"#,##0'
+                break
+            }
+            
+            // Bordes sutiles para los detalles
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'E5E7EB' } },
+              left: { style: 'thin', color: { argb: 'E5E7EB' } },
+              bottom: { style: 'thin', color: { argb: 'E5E7EB' } },
+              right: { style: 'thin', color: { argb: 'E5E7EB' } }
+            }
+          }
         })
       
-      // Ajustar anchos de columna
-      summarySheet.columns.forEach(column => {
-        column.width = 20
-      })
-      detailSheet.columns.forEach(column => {
-        column.width = 15
-      })
+      // Configurar anchos de columna optimizados
+      summarySheet.columns = [
+        { width: 25 }, // Trabajador
+        { width: 12 }, // Turnos
+        { width: 18 }, // Total a Cobrar
+        { width: 15 }  // Tarifa
+      ]
+      
+      detailSheet.columns = [
+        { width: 12 }, // Fecha
+        { width: 15 }, // Día
+        { width: 25 }, // Trabajador
+        { width: 15 }, // Turno
+        { width: 15 }  // Cobro
+      ]
       
       // Generar y descargar archivo
       const buffer = await workbook.xlsx.writeBuffer()

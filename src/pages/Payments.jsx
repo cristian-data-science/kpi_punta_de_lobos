@@ -10,7 +10,6 @@ import {
   RefreshCw, 
   ChevronDown, 
   TrendingUp, 
-  Calculator,
   Calendar,
   Gift,
   Star,
@@ -26,6 +25,42 @@ function Payments() {
   const [viewMode, setViewMode] = useState('total') // 'total' o 'monthly'
   const [selectedMonth, setSelectedMonth] = useState('') // Mes seleccionado para filtrar
   const [filteredPayments, setFilteredPayments] = useState([])
+
+  // Obtener número de semana para una fecha específica (algoritmo adaptado para la empresa)
+  const getWeekNumberForDate = (date) => {
+    // Crear una copia de la fecha para evitar modificarla
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    
+    // Para la lógica de la empresa: el domingo pertenece a la semana anterior
+    const calculationDate = new Date(d)
+    
+    if (d.getDay() === 0) { // Si es domingo
+      // Retroceder al lunes anterior para calcular la semana
+      calculationDate.setDate(d.getDate() - 6)
+    }
+    
+    // Obtener el jueves de esta semana (para determinar el año ISO)
+    const dayOfWeek = calculationDate.getDay() // 0=dom, 1=lun, ..., 6=sab
+    const thursday = new Date(calculationDate)
+    
+    // Calcular días para llegar al jueves desde el día actual
+    const daysToThursday = 4 - dayOfWeek // Días para llegar al jueves
+    thursday.setDate(calculationDate.getDate() + daysToThursday)
+    
+    // El año ISO es el año del jueves de esta semana
+    const isoYear = thursday.getFullYear()
+    
+    // Obtener el primer jueves del año ISO
+    const jan4 = new Date(isoYear, 0, 4)
+    const jan4Day = jan4.getDay() || 7
+    const firstThursday = new Date(jan4)
+    firstThursday.setDate(jan4.getDate() - jan4Day + 4)
+    
+    // Calcular número de semana
+    const weekNumber = Math.floor((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+    
+    return weekNumber
+  }
 
   // Cargar datos de pagos - SOLO VISTA TOTAL
   const loadPaymentData = () => {
@@ -50,7 +85,10 @@ function Payments() {
     const filtered = payments.map(worker => {
       // Filtrar turnos del trabajador por el mes seleccionado
       const turnosDelMes = worker.turnos.filter(turno => {
-        const turnoDate = new Date(turno.fecha)
+        // Usar timezone local para consistencia
+        const [year, month, day] = turno.fecha.split('-')
+        const turnoDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+        
         return turnoDate.getFullYear() === parseInt(year) && 
                (turnoDate.getMonth() + 1) === parseInt(monthNum)
       })
@@ -172,12 +210,6 @@ function Payments() {
     return currentData.reduce((total, worker) => total + worker.domingosTrabajados, 0)
   }
 
-  const getAveragePaymentPerWorker = () => {
-    const currentData = getCurrentPaymentsData()
-    if (currentData.length === 0) return 0
-    return getTotalPayments() / currentData.length
-  }
-
   // Función para detectar problemas con fechas/turnos
   const getDateWarnings = () => {
     if (viewMode !== 'monthly' || !selectedMonth) return null
@@ -198,7 +230,10 @@ function Payments() {
     
     allWorkers.forEach(worker => {
       worker.turnos.forEach(turno => {
-        const turnoDate = new Date(turno.fecha)
+        // Usar timezone local para consistencia
+        const [year, month, day] = turno.fecha.split('-')
+        const turnoDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+        
         if (turnoDate.getFullYear() === parseInt(year) && 
             (turnoDate.getMonth() + 1) === parseInt(monthNum)) {
           allTurnosInMonth.push({
@@ -215,12 +250,9 @@ function Payments() {
     // Encontrar días completamente faltantes (no aparecen en ningún registro)
     const missingDays = allDaysInMonth.filter(day => !daysWithRecords.includes(day))
     
-    // Encontrar días que aparecen en registros pero sin turnos
-    // (esto sería si hay fechas en la BD pero sin turnos, caso raro pero posible)
-    const daysWithoutShifts = daysWithRecords.filter(day => {
-      const turnosForDay = allTurnosInMonth.filter(turno => turno.day === day)
-      return turnosForDay.length === 0
-    })
+    // ELIMINADO: La lógica de daysWithoutShifts era incorrecta
+    // Si un día está en daysWithRecords, significa que SÍ tiene turnos
+    // Por lo tanto, esta validación siempre retornaba array vacío
 
     // Verificar si hay datos filtrados para mostrar el warning de "sin datos"
     const currentData = getCurrentPaymentsData()
@@ -245,15 +277,8 @@ function Payments() {
       }
     }
 
-    // Warning por días sin turnos (secundario)
-    if (daysWithoutShifts.length > 0) {
-      return {
-        type: 'days-without-shifts',
-        message: `Hay ${daysWithoutShifts.length} día(s) sin turnos registrados en ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}: día ${daysWithoutShifts.join(', ')}`,
-        count: daysWithoutShifts.length,
-        days: daysWithoutShifts
-      }
-    }
+    // ELIMINADO: Warning por días sin turnos ya que la lógica era incorrecta
+    // Si daysWithRecords contiene un día, significa que SÍ tiene turnos
 
     // Warning si el mes está muy incompleto (menos del 80% de días)
     const completionRate = (daysWithRecords.length / totalDaysInMonth) * 100
@@ -278,7 +303,10 @@ function Payments() {
   }
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString)
+    // Crear fecha en timezone local para evitar problemas de UTC
+    const [year, month, day] = dateString.split('-')
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+    
     return new Intl.DateTimeFormat('es-CL', {
       weekday: 'short',
       day: 'numeric',
@@ -292,199 +320,311 @@ function Payments() {
       const currentData = getCurrentPaymentsData()
       const workbook = new ExcelJS.Workbook()
       
+      // Metadatos del workbook
+      workbook.creator = 'TransApp - Sistema de Gestión de Transporte'
+      workbook.created = new Date()
+      workbook.description = 'Reporte de Pagos por Turnos de Trabajadores'
+      workbook.company = 'TransApp'
+      
       // HOJA 1: RESUMEN - Nombre corto para evitar truncamiento
       let sheetTitle = 'Resumen'
       if (viewMode === 'monthly' && selectedMonth) {
         const [year, month] = selectedMonth.split('-')
-        // Nombre corto: "Ago 2025" en lugar de "Agosto de 2025"
         const monthName = new Date(year, month - 1).toLocaleDateString('es-CL', { month: 'short' })
-        // Quitar el punto del final si existe
         sheetTitle = `${monthName.replace('.', '').charAt(0).toUpperCase() + monthName.replace('.', '').slice(1)} ${year}`
       }
       
       const worksheet = workbook.addWorksheet(sheetTitle)
+      worksheet.views = [{ showGridLines: false }]
 
-      // Configurar el encabezado
-      worksheet.columns = [
-        { header: 'Trabajador', key: 'trabajador', width: 25 },
-        { header: 'Total Turnos', key: 'totalTurnos', width: 15 },
-        { header: 'Feriados', key: 'feriados', width: 12 },
-        { header: 'Domingos', key: 'domingos', width: 12 },
-        { header: 'Total a Pagar', key: 'totalPago', width: 18 }
-      ]
+      // Título principal con diseño ejecutivo
+      const titleRow = worksheet.addRow(['REPORTE DE PAGOS POR TURNOS - TRANSAPP'])
+      titleRow.font = { size: 20, bold: true, color: { argb: 'FFFFFF' }, name: 'Arial Black' }
+      titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E3A8A' } }
+      titleRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      titleRow.border = {
+        top: { style: 'thick', color: { argb: '1E40AF' } },
+        left: { style: 'thick', color: { argb: '1E40AF' } },
+        bottom: { style: 'thick', color: { argb: '1E40AF' } },
+        right: { style: 'thick', color: { argb: '1E40AF' } }
+      }
+      worksheet.mergeCells('A1:E1')
+      titleRow.height = 40
 
-      // Aplicar estilos al encabezado
-      worksheet.getRow(1).eachCell((cell) => {
-        cell.font = { bold: true, color: { argb: 'FFFFFF' } }
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '366092' } }
-        cell.alignment = { vertical: 'middle', horizontal: 'center' }
-        cell.border = {
-          top: { style: 'thin', color: { argb: '000000' } },
-          left: { style: 'thin', color: { argb: '000000' } },
-          bottom: { style: 'thin', color: { argb: '000000' } },
-          right: { style: 'thin', color: { argb: '000000' } }
-        }
-      })
+      // Línea de separación
+      worksheet.addRow([''])
 
-      // Agregar datos
+      // Información del reporte con estilo empresarial
+      const infoHeaderRow = worksheet.addRow(['INFORMACIÓN DEL REPORTE'])
+      infoHeaderRow.font = { size: 14, bold: true, color: { argb: 'FFFFFF' } }
+      infoHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'EF4444' } }
+      infoHeaderRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      infoHeaderRow.border = {
+        top: { style: 'medium', color: { argb: 'DC2626' } },
+        left: { style: 'medium', color: { argb: 'DC2626' } },
+        bottom: { style: 'medium', color: { argb: 'DC2626' } },
+        right: { style: 'medium', color: { argb: 'DC2626' } }
+      }
+      worksheet.mergeCells('A3:E3')
+      infoHeaderRow.height = 28
+
+      const periodRow = worksheet.addRow(['Período:', viewMode === 'monthly' && selectedMonth ? `${sheetTitle}` : 'Todos los períodos', '', '', ''])
+      periodRow.font = { size: 11, color: { argb: '374151' } }
+      periodRow.getCell(1).font = { size: 11, bold: true, color: { argb: '1F2937' } }
+      periodRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF2F2' } }
+      periodRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      periodRow.height = 22
+
+      const fechaRow = worksheet.addRow(['Fecha de exportación:', new Date().toLocaleDateString('es-CL'), '', '', ''])
+      fechaRow.font = { size: 11, color: { argb: '6B7280' } }
+      fechaRow.getCell(1).font = { size: 11, bold: true, color: { argb: '1F2937' } }
+      fechaRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF2F2' } }
+      fechaRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      fechaRow.height = 22
+
+      const totalGeneralRow = worksheet.addRow(['Total general a pagar:', formatCurrency(getTotalPayments()), '', '', ''])
+      totalGeneralRow.font = { size: 12, bold: true, color: { argb: '1F2937' } }
+      totalGeneralRow.getCell(1).font = { size: 12, bold: true, color: { argb: '1F2937' } }
+      totalGeneralRow.getCell(2).font = { size: 12, bold: true, color: { argb: '059669' } }
+      totalGeneralRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'ECFDF5' } }
+      totalGeneralRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      totalGeneralRow.height = 25
+
+      // Línea de separación
+      worksheet.addRow([''])
+
+      // Encabezado de la tabla principal con estilo premium
+      const headerRow = worksheet.addRow(['Trabajador', 'Total Turnos', 'Feriados', 'Domingos', 'Total a Pagar'])
+      headerRow.font = { size: 13, bold: true, color: { argb: 'FFFFFF' } }
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '059669' } }
+      headerRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      headerRow.border = {
+        top: { style: 'medium', color: { argb: '047857' } },
+        left: { style: 'medium', color: { argb: '047857' } },
+        bottom: { style: 'medium', color: { argb: '047857' } },
+        right: { style: 'medium', color: { argb: '047857' } }
+      }
+      headerRow.height = 30
+
+      // Agregar datos con estilos alternados profesionales
       currentData.forEach((worker, index) => {
-        const row = worksheet.addRow({
-          trabajador: worker.conductorNombre,
-          totalTurnos: worker.totalTurnos,
-          feriados: worker.feriadosTrabajados,
-          domingos: worker.domingosTrabajados,
-          totalPago: worker.totalMonto
-        })
+        const row = worksheet.addRow([
+          worker.conductorNombre,
+          worker.totalTurnos,
+          worker.feriadosTrabajados,
+          worker.domingosTrabajados,
+          worker.totalMonto
+        ])
 
-        // Alternar colores de fila
-        if (index % 2 === 1) {
-          row.eachCell((cell) => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8F9FA' } }
-          })
-        }
-
-        // Formatear la columna de dinero
-        row.getCell('totalPago').numFmt = '"$"#,##0'
+        // Colores alternados para mejor legibilidad
+        const backgroundColor = index % 2 === 0 ? 'FFFFFF' : 'F8FAFC'
+        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: backgroundColor } }
         
-        // Aplicar bordes
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'CCCCCC' } },
-            left: { style: 'thin', color: { argb: 'CCCCCC' } },
-            bottom: { style: 'thin', color: { argb: 'CCCCCC' } },
-            right: { style: 'thin', color: { argb: 'CCCCCC' } }
-          }
-        })
+        // Estilos específicos por columna
+        row.getCell(1).font = { size: 11, color: { argb: '1F2937' } } // Trabajador - texto normal
+        row.getCell(2).font = { size: 11, color: { argb: '374151' } } // Total Turnos - número
+        row.getCell(3).font = { size: 11, color: { argb: 'DC2626' } } // Feriados - rojo
+        row.getCell(4).font = { size: 11, color: { argb: '7C3AED' } } // Domingos - púrpura
+        row.getCell(5).font = { size: 11, bold: true, color: { argb: '059669' } } // Total - verde
+        
+        row.alignment = { horizontal: 'left', vertical: 'middle' }
+        row.height = 25
+        
+        // Bordes profesionales
+        row.border = {
+          top: { style: 'thin', color: { argb: 'E5E7EB' } },
+          left: { style: 'thin', color: { argb: 'E5E7EB' } },
+          bottom: { style: 'thin', color: { argb: 'E5E7EB' } },
+          right: { style: 'thin', color: { argb: 'E5E7EB' } }
+        }
       })
 
       // Agregar fila de totales
-      const totalRow = worksheet.addRow({
-        trabajador: 'TOTAL',
-        totalTurnos: getTotalShifts(),
-        feriados: getTotalHolidays(),
-        domingos: getTotalSundays(),
-        totalPago: getTotalPayments()
-      })
+      const totalRow = worksheet.addRow([
+        'TOTAL GENERAL',
+        getTotalShifts(),
+        getTotalHolidays(),
+        getTotalSundays(),
+        getTotalPayments()
+      ])
 
       // Estilizar fila de totales
       totalRow.eachCell((cell, colNumber) => {
-        cell.font = { bold: true }
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E8F4FD' } }
-        cell.border = {
-          top: { style: 'medium', color: { argb: '366092' } },
-          left: { style: 'thin', color: { argb: '366092' } },
-          bottom: { style: 'medium', color: { argb: '366092' } },
-          right: { style: 'thin', color: { argb: '366092' } }
-        }
-        if (colNumber === 5) { // Columna de total pago
-          cell.numFmt = '"$"#,##0'
-        }
-      })
-
-      // HOJA 2: DETALLES - Siempre se crea, tanto para vista total como mensual
-      const detailSheet = workbook.addWorksheet('Detalles')
-        
-        // Configurar columnas del detalle
-        detailSheet.columns = [
-          { header: 'Trabajador', key: 'trabajador', width: 25 },
-          { header: 'Fecha', key: 'fecha', width: 12 },
-          { header: 'Día', key: 'dia', width: 12 },
-          { header: 'Tipo Turno', key: 'tipoTurno', width: 15 },
-          { header: 'Categoría Día', key: 'categoriaDia', width: 18 },
-          { header: 'Tarifa', key: 'tarifa', width: 15 }
-        ]
-
-        // Aplicar estilos al encabezado de detalles
-        detailSheet.getRow(1).eachCell((cell) => {
-          cell.font = { bold: true, color: { argb: 'FFFFFF' } }
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '2D5B2D' } }
-          cell.alignment = { vertical: 'middle', horizontal: 'center' }
+        if (colNumber <= 5) { // Solo aplicar a las 5 columnas que usamos
+          cell.font = { size: 11, bold: true, color: { argb: 'FFFFFF' } }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E40AF' } }
           cell.border = {
-            top: { style: 'thin', color: { argb: '000000' } },
-            left: { style: 'thin', color: { argb: '000000' } },
-            bottom: { style: 'thin', color: { argb: '000000' } },
-            right: { style: 'thin', color: { argb: '000000' } }
+            top: { style: 'medium', color: { argb: '000000' } },
+            left: { style: 'medium', color: { argb: '000000' } },
+            bottom: { style: 'medium', color: { argb: '000000' } },
+            right: { style: 'medium', color: { argb: '000000' } }
           }
-        })
-
-        // Agregar todos los turnos detallados
-        let rowIndex = 2
-        currentData.forEach((worker) => {
-          // Ordenar turnos por fecha
-          const turnosOrdenados = worker.turnos.sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+          cell.alignment = { horizontal: 'left', vertical: 'middle' }
           
-          turnosOrdenados.forEach((turno) => {
-            const row = detailSheet.addRow({
-              trabajador: worker.conductorNombre,
-              fecha: turno.fecha,
-              dia: formatDate(turno.fecha),
-              tipoTurno: turno.turno,
-              categoriaDia: turno.categoriasDia,
-              tarifa: turno.tarifa
-            })
-
-            // Alternar colores de fila
-            if ((rowIndex - 2) % 2 === 1) {
-              row.eachCell((cell) => {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F0F8F0' } }
-              })
-            }
-
-            // Formatear la columna de tarifa
-            row.getCell('tarifa').numFmt = '"$"#,##0'
-            
-            // Aplicar bordes
-            row.eachCell((cell) => {
-              cell.border = {
-                top: { style: 'thin', color: { argb: 'CCCCCC' } },
-                left: { style: 'thin', color: { argb: 'CCCCCC' } },
-                bottom: { style: 'thin', color: { argb: 'CCCCCC' } },
-                right: { style: 'thin', color: { argb: 'CCCCCC' } }
-              }
-            })
-
-            // Colorear filas especiales
-            if (turno.isSunday) {
-              row.eachCell((cell) => {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3E8FF' } }
-              })
-            } else if (turno.isHoliday) {
-              row.eachCell((cell) => {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF2F2' } }
-              })
-            } else if (turno.categoriasDia === 'Sábados 3er turno') {
-              row.eachCell((cell) => {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBEB' } }
-              })
-            }
-
-            rowIndex++
-          })
-        })
-
-        // Agregar fila de total en detalles
-        const detailTotalRow = detailSheet.addRow({
-          trabajador: '',
-          fecha: '',
-          dia: '',
-          tipoTurno: '',
-          categoriaDia: 'TOTAL GENERAL:',
-          tarifa: getTotalPayments()
-        })
-
-        detailTotalRow.eachCell((cell, colNumber) => {
-          cell.font = { bold: true }
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E8F5E8' } }
-          cell.border = {
-            top: { style: 'medium', color: { argb: '2D5B2D' } },
-            left: { style: 'thin', color: { argb: '2D5B2D' } },
-            bottom: { style: 'medium', color: { argb: '2D5B2D' } },
-            right: { style: 'thin', color: { argb: '2D5B2D' } }
-          }
-          if (colNumber === 6) { // Columna de tarifa
+          if (colNumber === 5) { // Solo la columna monetaria
             cell.numFmt = '"$"#,##0'
           }
+        }
+      })
+      totalRow.height = 22
+
+      // HOJA 2: DETALLES COMPLETOS
+      const detailSheet = workbook.addWorksheet('Detalles Completos')
+      detailSheet.views = [{ showGridLines: false }]
+        
+      // Título de detalles con estilo profesional
+      const detailTitleRow = detailSheet.addRow(['DETALLE COMPLETO DE TURNOS Y TARIFAS'])
+      detailTitleRow.font = { size: 18, bold: true, color: { argb: 'FFFFFF' }, name: 'Arial Black' }
+      detailTitleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '7C3AED' } }
+      detailTitleRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      detailTitleRow.border = {
+        top: { style: 'thick', color: { argb: '6D28D9' } },
+        left: { style: 'thick', color: { argb: '6D28D9' } },
+        bottom: { style: 'thick', color: { argb: '6D28D9' } },
+        right: { style: 'thick', color: { argb: '6D28D9' } }
+      }
+      detailSheet.mergeCells('A1:G1')
+      detailTitleRow.height = 35
+
+      // Línea de separación
+      detailSheet.addRow([''])
+
+      // Encabezados de la tabla de detalles con estilo premium
+      const detailHeaderRow = detailSheet.addRow(['Trabajador', 'Fecha', 'Día', 'Tipo Turno', 'Categoría Día', 'Tarifa', 'Semana'])
+      detailHeaderRow.font = { size: 12, bold: true, color: { argb: 'FFFFFF' } }
+      detailHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'DC2626' } }
+      detailHeaderRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      detailHeaderRow.border = {
+        top: { style: 'medium', color: { argb: 'B91C1C' } },
+        left: { style: 'medium', color: { argb: 'B91C1C' } },
+        bottom: { style: 'medium', color: { argb: 'B91C1C' } },
+        right: { style: 'medium', color: { argb: 'B91C1C' } }
+      }
+      detailHeaderRow.height = 28
+
+      // Aplicar bordes SOLO a las columnas con datos (A-G)
+      for (let col = 1; col <= 7; col++) {
+        const cell = detailHeaderRow.getCell(col)
+        cell.border = {
+          top: { style: 'medium', color: { argb: '000000' } },
+          left: { style: 'medium', color: { argb: '000000' } },
+          bottom: { style: 'medium', color: { argb: '000000' } },
+          right: { style: 'medium', color: { argb: '000000' } }
+        }
+        cell.alignment = { horizontal: 'left', vertical: 'middle' }
+      }
+
+          // Agregar todos los turnos detallados con estilos profesionales
+      let rowIndex = 0
+      currentData.forEach((worker) => {
+        // Ordenar turnos por fecha
+        const turnosOrdenados = worker.turnos.sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+        
+        turnosOrdenados.forEach((turno) => {
+          const [year, month, day] = turno.fecha.split('-')
+          const turnoDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+          
+          // Usar la función de semana para consistencia con Cobros
+          const weekInfo = `Semana ${getWeekNumberForDate(turnoDate)}`
+          
+          const row = detailSheet.addRow([
+            worker.conductorNombre,
+            turno.fecha,
+            formatDate(turno.fecha),
+            turno.turno,
+            turno.categoriasDia,
+            turno.tarifa,
+            weekInfo
+          ])
+
+          // Colores específicos según el tipo de día con mejor visual
+          let backgroundColor = rowIndex % 2 === 0 ? 'FFFFFF' : 'F8FAFC'
+          
+          if (turno.isSunday) {
+            backgroundColor = 'F3E8FF' // Morado claro para domingos
+          } else if (turno.isHoliday) {
+            backgroundColor = 'FEF2F2' // Rojo claro para feriados
+          } else if (turno.categoriasDia === 'Sábados 3er turno') {
+            backgroundColor = 'FFFBEB' // Amarillo claro para sábados 3er turno
+          }
+          
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: backgroundColor } }
+          
+          // Estilos específicos por columna
+          row.getCell(1).font = { size: 10, bold: true, color: { argb: '1E40AF' } } // Trabajador
+          row.getCell(2).font = { size: 10, color: { argb: '374151' } } // Fecha
+          row.getCell(3).font = { size: 10, color: { argb: '6B7280' } } // Día
+          row.getCell(4).font = { size: 10, color: { argb: '7C3AED' } } // Tipo Turno
+          row.getCell(5).font = { size: 10, color: { argb: 'EA580C' } } // Categoría
+          row.getCell(6).font = { size: 10, bold: true, color: { argb: '059669' } } // Tarifa
+          row.getCell(7).font = { size: 10, color: { argb: 'DC2626' } } // Semana
+          
+          row.alignment = { horizontal: 'left', vertical: 'middle' }
+          row.height = 22
+          
+          // Bordes profesionales
+          row.border = {
+            top: { style: 'thin', color: { argb: 'E5E7EB' } },
+            left: { style: 'thin', color: { argb: 'E5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'E5E7EB' } },
+            right: { style: 'thin', color: { argb: 'E5E7EB' } }
+          }
+
+          rowIndex++
         })
+      })
+
+      // Agregar fila de total en detalles con estilo premium
+      const detailTotalRow = detailSheet.addRow([
+        'TOTAL GENERAL',
+        '',
+        '',
+        `${getTotalShifts()} turnos`,
+        `${getTotalHolidays()} feriados, ${getTotalSundays()} domingos`,
+        getTotalPayments(),
+        ''
+      ])
+
+      detailTotalRow.font = { size: 12, bold: true, color: { argb: 'FFFFFF' } }
+      detailTotalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '059669' } }
+      detailTotalRow.alignment = { horizontal: 'left', vertical: 'middle' }
+      detailTotalRow.border = {
+        top: { style: 'medium', color: { argb: '047857' } },
+        left: { style: 'medium', color: { argb: '047857' } },
+        bottom: { style: 'medium', color: { argb: '047857' } },
+        right: { style: 'medium', color: { argb: '047857' } }
+      }
+      detailTotalRow.height = 28
+
+      // Configurar anchos de columna optimizados
+      worksheet.columns = [
+        { width: 25 }, // Trabajador
+        { width: 15 }, // Total Turnos
+        { width: 12 }, // Feriados
+        { width: 12 }, // Domingos
+        { width: 18 }  // Total a Pagar
+      ]
+      
+      detailSheet.columns = [
+        { width: 25 }, // Trabajador
+        { width: 12 }, // Fecha
+        { width: 15 }, // Día
+        { width: 15 }, // Tipo Turno
+        { width: 20 }, // Categoría Día
+        { width: 15 }, // Tarifa
+        { width: 15 }  // Semana
+      ]
+
+      // Agregar filtros automáticos a ambas hojas
+      worksheet.autoFilter = {
+        from: 'A8',
+        to: `F${currentData.length + 8}`
+      }
+      
+      detailSheet.autoFilter = {
+        from: 'A3',
+        to: `G${rowIndex + 3}`
+      }
 
       // Generar nombre de archivo dinámico
       const fileName = viewMode === 'monthly' && selectedMonth 
@@ -536,7 +676,7 @@ function Payments() {
               Ir al Calendario
             </Button>
             <Button 
-              onClick={() => window.location.href = '/upload-files'} 
+              onClick={() => window.location.href = '/upload'} 
               variant="outline"
             >
               Ir a Subir Archivos
@@ -649,8 +789,6 @@ function Payments() {
               ? 'bg-gray-50 border-gray-400 text-gray-700' 
               : warning.type === 'missing-days'
               ? 'bg-red-50 border-red-400 text-red-700'
-              : warning.type === 'days-without-shifts'
-              ? 'bg-orange-50 border-orange-400 text-orange-700'
               : 'bg-yellow-50 border-yellow-400 text-yellow-700'
           }`}>
             <div className="flex items-start">
@@ -663,10 +801,6 @@ function Payments() {
                   <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                   </svg>
-                ) : warning.type === 'days-without-shifts' ? (
-                  <svg className="h-5 w-5 text-orange-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
                 ) : (
                   <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
@@ -677,7 +811,6 @@ function Payments() {
                 <p className="text-sm font-medium">
                   {warning.type === 'no-data' ? 'Sin datos' : 
                    warning.type === 'missing-days' ? 'Días faltantes' : 
-                   warning.type === 'days-without-shifts' ? 'Días sin turnos' :
                    'Mes incompleto'}
                 </p>
                 <p className="text-sm mt-1">
@@ -695,87 +828,59 @@ function Payments() {
       })()}
 
       {/* Resumen general */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card className="overflow-hidden">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total a Pagar</p>
-                <p className="text-2xl font-bold text-green-600">
+              <div className="min-w-0 flex-1 pr-2">
+                <p className="text-sm font-medium text-gray-600 truncate">Total a Pagar</p>
+                <p className="text-xl lg:text-2xl font-bold text-green-600 whitespace-nowrap overflow-hidden text-ellipsis">
                   {formatCurrency(getTotalPayments())}
                 </p>
               </div>
-              <DollarSign className="h-8 w-8 text-green-600" />
+              <DollarSign className="h-8 w-8 text-green-600 flex-shrink-0" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Trabajadores</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {getCurrentPaymentsData().length}
-                </p>
-              </div>
-              <Users className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Turnos</p>
-                <p className="text-2xl font-bold text-orange-600">
+              <div className="min-w-0 flex-1 pr-2">
+                <p className="text-sm font-medium text-gray-600 truncate">Total Turnos</p>
+                <p className="text-xl lg:text-2xl font-bold text-orange-600 whitespace-nowrap overflow-hidden text-ellipsis">
                   {getTotalShifts()}
                 </p>
               </div>
-              <Clock className="h-8 w-8 text-orange-600" />
+              <Clock className="h-8 w-8 text-orange-600 flex-shrink-0" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Feriados</p>
-                <p className="text-2xl font-bold text-red-600">
+              <div className="min-w-0 flex-1 pr-2">
+                <p className="text-sm font-medium text-gray-600 truncate">Feriados</p>
+                <p className="text-xl lg:text-2xl font-bold text-red-600 whitespace-nowrap overflow-hidden text-ellipsis">
                   {getTotalHolidays()}
                 </p>
               </div>
-              <Gift className="h-8 w-8 text-red-600" />
+              <Gift className="h-8 w-8 text-red-600 flex-shrink-0" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Domingos</p>
-                <p className="text-2xl font-bold text-purple-600">
+              <div className="min-w-0 flex-1 pr-2">
+                <p className="text-sm font-medium text-gray-600 truncate">Domingos</p>
+                <p className="text-xl lg:text-2xl font-bold text-purple-600 whitespace-nowrap overflow-hidden text-ellipsis">
                   {getTotalSundays()}
                 </p>
               </div>
-              <Star className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Promedio</p>
-                <p className="text-2xl font-bold text-indigo-600">
-                  {formatCurrency(getAveragePaymentPerWorker())}
-                </p>
-              </div>
-              <Calculator className="h-8 w-8 text-indigo-600" />
+              <Star className="h-8 w-8 text-purple-600 flex-shrink-0" />
             </div>
           </CardContent>
         </Card>
@@ -1073,10 +1178,6 @@ function Payments() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                <span className="text-sm font-medium text-gray-900">Promedio por trabajador</span>
-                <span className="text-sm text-gray-600">{formatCurrency(getAveragePaymentPerWorker())}</span>
-              </div>
               <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                 <span className="text-sm font-medium text-gray-900">Total trabajadores activos</span>
                 <span className="text-sm text-gray-600">{getCurrentPaymentsData().length}</span>

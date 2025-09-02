@@ -35,15 +35,23 @@ Layout (Header + Sidebar + Outlet)
 ## Cobros System Architecture
 
 ### Billing Management Module
-- **Location**: `src/pages/Cobros.jsx` (689 lines) - Complete billing interface
+- **Location**: `src/pages/Cobros.jsx` (689 lines) - Complete billing interface with professional Excel export
 - **Purpose**: Shift-based billing calculation with configurable tariffs per shift
 - **Navigation**: Replaced Routes section in sidebar with Receipt icon
 
 ### Core Features
 - **Configurable Tariffs**: localStorage-persisted tariff configuration with real-time updates
 - **Period Filtering**: Weekly/Monthly view modes with ISO 8601 week calculations
-- **Excel Export**: Professional ExcelJS integration with summary and detail sheets
+- **Professional Excel Export**: Enterprise-grade ExcelJS integration with advanced styling
 - **Real-time Calculations**: Dynamic billing totals based on shift counts and configured rates
+
+### Professional Excel Export Features
+- **Advanced Styling**: Multi-sheet workbooks with professional formatting
+- **Title Design**: Arial Black fonts with gradient backgrounds and thick borders
+- **Information Sections**: Color-coded sections with gradient backgrounds
+- **Data Tables**: Alternating row colors, column-specific styling, professional borders
+- **Detail Sheets**: Comprehensive breakdown with visual hierarchy and color coding
+- **Column Optimization**: Auto-sized columns with specific styling per data type
 
 ### Week Calculation Algorithm
 - **Implementation**: `getWeekNumberForDate()` - ISO 8601 adapted for labor shifts
@@ -68,19 +76,22 @@ Layout (Header + Sidebar + Outlet)
 
 ## Payment System Architecture
 
+### Payment System Architecture
+
 ### Excel Export Functionality
-- **Library**: ExcelJS (replaced basic XLSX for professional styling)
+- **Library**: ExcelJS with professional enterprise-grade styling
 - **Location**: `src/pages/Payments.jsx` - `exportToExcel()` async function
-- **Features**: 
-  - Professional styling with headers, borders, and currency formatting
-  - Multiple worksheets support (Summary + Individual breakdowns)
-  - Automatic column width adjustment
-  - Company branding and metadata
-  - Monthly filtering support with dynamic sheet naming
+- **Professional Features**: 
+  - **Advanced Styling**: Arial Black titles, gradient backgrounds, sophisticated borders
+  - **Multi-sheet Design**: Summary + Detailed breakdown with consistent professional formatting
+  - **Column Optimization**: Automatic width adjustment and column-specific styling
+  - **Enterprise Branding**: Company metadata and professional presentation
+  - **Color-Coded Data**: Different colors for data types (workers: blue, amounts: green, holidays: red)
 - **Sheet Structure**:
-  - **Total View**: "Resumen" + "Detalles" sheets
-  - **Monthly View**: "[Month] [Year]" (e.g., "Ago 2025") + "Detalles" sheets
-- **Monthly Filtering**: `filterPaymentsByMonth()` and `getCurrentPaymentsData()` functions
+  - **Total View**: "Resumen" + "Detalles Completos" sheets with full professional styling
+  - **Monthly View**: "[Month] [Year]" + "Detalles Completos" sheets
+- **Removed Features**: "Promedio por trabajador" column and display completely eliminated
+- **Data Validation**: Enhanced date warnings with priority system for missing days vs incomplete months
 
 ### Calendar Integration
 - **Shift Rate Calculation**: Dynamic rates based on day type and shift
@@ -111,6 +122,24 @@ Layout (Header + Sidebar + Outlet)
 - **Priority System**: Missing days > Days without shifts > Incomplete month
 
 ## Development Patterns
+
+### Date Handling & Timezone Consistency
+- **Critical Fix**: All date parsing uses timezone-local creation to prevent UTC offset issues
+- **Pattern**: `const [year, month, day] = dateString.split('-'); const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))`
+- **Utility**: `src/utils/dateUtils.js` provides consistent date handling functions
+- **Applied in**: `formatDate()` functions in Cobros.jsx, Payments.jsx, and masterDataService.js
+- **Issue Fixed**: Date strings like "2025-06-02" now correctly display as "lun, 2 jun" instead of previous day
+
+### Professional Excel Export System
+- **ExcelJS Integration**: Advanced styling with enterprise-grade formatting
+- **Features**:
+  - **Professional Titles**: Arial Black fonts with gradient backgrounds and thick borders
+  - **Section Headers**: Color-coded information sections with distinct styling
+  - **Alternating Rows**: Enhanced readability with professional color schemes
+  - **Column-Specific Styling**: Different colors for data types (workers: blue, amounts: green, dates: gray)
+  - **Multi-Sheet Support**: Summary and detailed breakdowns with consistent styling
+- **Applied to**: Both Cobros.jsx and Payments.jsx reports
+- **Color Scheme**: Professional gradients (blue titles, red/green sections, alternating row backgrounds)
 
 ### File Naming & Structure
 - **Pages**: PascalCase (e.g., `Workers.jsx`, `UploadFiles.jsx`)
@@ -260,6 +289,16 @@ MasterDataService initializes with empty arrays on first load:
 ### Fresh Browser Load Error
 **Symptom**: `Cannot read properties of undefined (reading 'forEach')`
 **Solution**: Ensure MasterDataService constructor initializes `this.observers = []` before calling `this.initializeDefaultData()`
+
+### Date Display Inconsistency (FIXED)
+**Symptom**: Date field shows "2025-06-02" but formatted day shows "dom, 1 jun" (off by one day)
+**Root Cause**: Using `new Date(dateString)` directly causes UTC timezone interpretation issues
+**Solution**: Manual date parsing using timezone-local creation:
+```javascript
+const [year, month, day] = dateString.split('-')
+const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+```
+**Applied to**: formatDate() functions in Cobros.jsx, Payments.jsx, and masterDataService.js
 
 ### Vercel Deployment Issues
 **Symptom**: Build fails or shows blank page

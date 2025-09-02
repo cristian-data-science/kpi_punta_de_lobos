@@ -367,8 +367,9 @@ class MasterDataService {
       const turno = this.getTurnoNumber(shift.turno)
       const tarifa = this.calculateShiftRate(fecha, turno)
 
-      // Determinar tipo de día
-      const dateObj = new Date(fecha + 'T00:00:00')
+      // Determinar tipo de día - usar timezone local para consistencia
+      const [year, month, day] = fecha.split('-')
+      const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
       const dayOfWeek = dateObj.getDay()
       const isHoliday = calendarConfig.holidays.includes(fecha)
       const isSunday = dayOfWeek === 0

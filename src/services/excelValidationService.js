@@ -847,8 +847,16 @@ export class ExcelValidationService {
    * Utilitario para convertir fechas de Excel
    */
   excelDateToJSDate(excelDate) {
-    const epoch = new Date(1900, 0, 1)
-    return new Date(epoch.getTime() + (excelDate - 2) * 24 * 60 * 60 * 1000)
+    // Corrección: Excel incorrectamente considera 1900 como año bisiesto
+    // La fecha serial 1 de Excel = 1 de enero de 1900
+    // Pero debido al error de Excel, necesitamos ajustar por el "29 de febrero de 1900" inexistente
+    const epoch = new Date(1900, 0, 1) // 1 de enero de 1900
+    
+    // Para fechas después del "29 de febrero de 1900" (que no existe), Excel está 1 día adelantado
+    // Por eso restamos 1 en lugar de 2
+    const adjustedDays = excelDate > 59 ? excelDate - 1 : excelDate
+    
+    return new Date(epoch.getTime() + (adjustedDays - 1) * 24 * 60 * 60 * 1000)
   }
 
   /**
