@@ -6,7 +6,7 @@ import Dashboard from './pages/Dashboard'
 import UploadFiles from './pages/UploadFiles'
 import Workers from './pages/Workers'
 import Vehicles from './pages/Vehicles'
-import RoutesPage from './pages/Routes'
+import Cobros from './pages/Cobros'
 import Payments from './pages/Payments'
 import Inconsistencies from './pages/Inconsistencies'
 import Calendar from './pages/Calendar'
@@ -53,7 +53,7 @@ const AppRoutes = () => {
         <Route path="upload" element={<UploadFiles />} />
         <Route path="workers" element={<Workers />} />
         <Route path="vehicles" element={<Vehicles />} />
-        <Route path="routes" element={<RoutesPage />} />
+        <Route path="cobros" element={<Cobros />} />
         <Route path="payments" element={<Payments />} />
         <Route path="inconsistencies" element={<Inconsistencies />} />
         <Route path="calendar" element={<Calendar />} />

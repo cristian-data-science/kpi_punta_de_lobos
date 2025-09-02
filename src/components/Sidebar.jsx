@@ -5,7 +5,7 @@ import {
   Upload, 
   Users, 
   Truck, 
-  Route,
+  Receipt,
   DollarSign, 
   Calendar,
   Settings,
@@ -83,10 +83,10 @@ const Sidebar = ({ isOpen, onClose }) => {
       description: 'Flota de camiones'
     },
     { 
-      path: '/routes', 
-      icon: Route, 
-      label: 'Rutas',
-      description: 'Gestión de rutas'
+      path: '/cobros', 
+      icon: Receipt, 
+      label: 'Cobros',
+      description: 'Facturación de servicios'
     },
     { 
       path: '/payments', 

@@ -24,12 +24,47 @@ TransApp is a React-based transportation management system for fleet and worker 
 ```
 Layout (Header + Sidebar + Outlet)
 ├── Dashboard (main metrics)
-├── Workers/Vehicles/Routes/Payments (CRUD pages + Excel export)
+├── Workers/Vehicles/Cobros/Payments (CRUD pages + Excel export)
+│   ├── Cobros: Shift-based billing with weekly/monthly filtering and configurable rates
 │   └── Payments: Total/Monthly filtering with date validation warnings
 ├── UploadFiles (CSV import functionality)
 ├── Calendar (shift management with rate calculations)
 └── Settings (configuration)
 ```
+
+## Cobros System Architecture
+
+### Billing Management Module
+- **Location**: `src/pages/Cobros.jsx` (689 lines) - Complete billing interface
+- **Purpose**: Shift-based billing calculation with configurable tariffs per shift
+- **Navigation**: Replaced Routes section in sidebar with Receipt icon
+
+### Core Features
+- **Configurable Tariffs**: localStorage-persisted tariff configuration with real-time updates
+- **Period Filtering**: Weekly/Monthly view modes with ISO 8601 week calculations
+- **Excel Export**: Professional ExcelJS integration with summary and detail sheets
+- **Real-time Calculations**: Dynamic billing totals based on shift counts and configured rates
+
+### Week Calculation Algorithm
+- **Implementation**: `getWeekNumberForDate()` - ISO 8601 adapted for labor shifts
+- **Sunday Handling**: Treats Sundays as part of following week for labor context
+- **Algorithm Steps**:
+  1. If Sunday, use following Monday for calculation
+  2. Find Thursday of calculation week to determine ISO year
+  3. Calculate weeks from first Thursday of ISO year
+- **Consistency**: Unified across filtering and display functions
+
+### Data Processing
+- **Source Data**: `masterDataService.getWorkerShifts()` integration
+- **Filtering Logic**: `filterTurnosByPeriod()` with period-specific algorithms
+- **Worker Aggregation**: `getTurnosPorTrabajador()` with billing totals per worker
+- **Currency Formatting**: Chilean peso (CLP) with proper localization
+
+### Excel Export Specifications
+- **Structure**: Multi-sheet workbook (Summary + Details)
+- **Metadata**: Company branding, export date, tariff configuration
+- **Professional Styling**: Headers, borders, currency formatting, column auto-sizing
+- **Dynamic Naming**: Period-specific file names with sanitized labels
 
 ## Payment System Architecture
 
@@ -157,14 +192,15 @@ constructor() {
 MasterDataService initializes with empty arrays on first load:
 - Workers: Empty array - ready for real data input
 - Vehicles: Empty array - no demo fleet data
-- Routes & Payments: Empty arrays - clean slate for development
+- Cobros & Payments: Empty arrays - clean slate for development
 - Use `resetAllData()` method to clear existing data during development
 - Use `loadDemoData()` method to load demonstration data when needed
 
 ### Data Management Features
 - **Clear All Data**: Button in Settings page to reset all application data
 - **Load Demo Data**: Button in UploadFiles page to load sample data for testing
-- Demo data includes 3 workers, 3 vehicles, 2 routes, and 3 payment records
+- Demo data includes 3 workers, 3 vehicles, shift records, and payment data
+- **Cobros Configuration**: Tariff settings persisted in localStorage with `transapp_cobro_config` key
 
 ## Component Extension Guidelines
 
