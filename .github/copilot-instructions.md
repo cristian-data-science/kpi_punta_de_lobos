@@ -1,19 +1,29 @@
 # TransApp - AI Coding Agent Instructions
 
 ## Project Overview
-TransApp is a React-based transportation management system for fleet and worker administration. Built with modern React 19, Vite, and a comprehensive Radix UI + Tailwind design system.
+TransApp is a React-based transportation management system for fleet and worker administration. Built with modern React 19, Vite, and a comprehensive Radix UI + Tailwind design system with **integrated Supabase PostgreSQL backend and Model Context Protocol (MCP) support**.
 
 **🚀 Production Status**: Live at https://transapp-qjloxuf0s-cris-projects-245b6b28.vercel.app
 **📦 Repository**: https://github.com/cristian-data-science/transapp
 **🏗️ Deployment**: Automated via Vercel CLI with manual triggers when needed
+**🗄️ Database**: Supabase PostgreSQL with 14+ workers and 98+ shift records
+**🔌 MCP Integration**: Complete Model Context Protocol implementation for AI-database interactions
 
 ## Architecture & Data Flow
 
-### Core Services Pattern
-- **MasterDataService** (`src/services/masterDataService.js`): Central data management with localStorage persistence
+### Enhanced Services Architecture (Dual-Layer System)
+- **Supabase Integration** (`src/services/supabaseService.js`): Primary database layer with PostgreSQL backend
+- **SupabaseIntegrationService** (`src/services/supabaseIntegrationService.js`): Bridge between Supabase and existing system
+- **MasterDataService** (`src/services/masterDataService.js`): Central data management with localStorage fallback
 - **PersistentStorage** (`src/services/persistentStorage.js`): Abstracted localStorage operations with `transapp_` prefix
 - **ConfigService** (`src/services/configService.js`): Centralized configuration management with snapshot sync
-- Data flows: UI Components → MasterDataService → PersistentStorage → localStorage
+- **Data Flow**: UI Components → MasterDataService ↔ SupabaseIntegration ↔ Supabase PostgreSQL (localStorage fallback)
+
+### Database Architecture
+- **Primary**: Supabase PostgreSQL with real-time capabilities
+- **Tables**: `trabajadores` (14 workers with "fijo" contracts), `turnos` (98+ shift records)
+- **Features**: UUID PKs, RLS policies, indexed searches, foreign key relationships
+- **Backup**: localStorage with `transapp_` prefix for offline functionality
 
 ### Authentication System
 - Fixed credentials: `admin` / `transapp123` (see `AuthContext.jsx`)
@@ -30,6 +40,74 @@ Layout (Header + Sidebar + Outlet)
 ├── UploadFiles (CSV import functionality)
 ├── Calendar (shift management with rate calculations)
 └── Settings (configuration)
+```
+
+## Model Context Protocol (MCP) Integration
+
+### MCP Server Architecture
+- **Location**: `mcp/mcp-server-simple.cjs` (active server)
+- **Configuration**: `mcp.json` with environment variables
+- **SDK**: `@modelcontextprotocol/sdk` v1.17.5 CommonJS implementation
+- **Database Connection**: Direct Supabase PostgreSQL access via service role
+
+### Available MCP Tools
+1. **`query_workers`** - Query workers with filters (search, status, pagination)
+2. **`create_worker`** - Create new worker with full validation
+3. **`update_worker`** - Update existing worker by ID
+4. **`query_shifts`** - Query shifts with worker relations and date filters
+5. **`create_shift`** - Create new shift with worker association
+6. **execute_sql`** - Execute safe SELECT queries on database
+7. **`get_database_schema`** - Get complete database schema information
+
+### MCP Server Features
+- **Real-time Database Access**: Direct PostgreSQL operations via Supabase
+- **Comprehensive CRUD**: Full Create, Read, Update, Delete operations
+- **Relationship Queries**: Joins between trabajadores and turnos tables
+- **Safe SQL Execution**: Only SELECT queries allowed for security
+- **Schema Introspection**: Complete database structure access
+- **Error Handling**: Robust error responses with detailed messages
+
+### Database Schema Access via MCP
+```
+trabajadores table:
+- id (uuid, PK)
+- nombre (text)
+- rut (text, unique)  
+- contrato (text: 'fijo'|'eventual'|'planta') - ALL SET TO 'fijo'
+- telefono (text)
+- estado (text: 'activo'|'inactivo')
+- created_at, updated_at (timestamps)
+
+turnos table:
+- id (uuid, PK)
+- trabajador_id (uuid, FK -> trabajadores.id)
+- fecha (date)
+- turno_tipo (text: 'primer_turno'|'segundo_turno'|'tercer_turno')
+- estado (text: 'programado'|'completado'|'cancelado')
+- created_at (timestamp)
+```
+
+### Current Database State
+- **14 Workers**: All with "fijo" contracts (updated from "eventual")
+- **98+ Shifts**: Real shift data with proper worker relationships
+- **UUID PKs**: All tables use UUID primary keys
+- **RLS Enabled**: Row Level Security policies configured
+- **Indexed**: Optimized queries on rut, fecha, and relationship fields
+
+### MCP Configuration
+```json
+{
+  "mcpServers": {
+    "transapp-supabase": {
+      "command": "node",
+      "args": ["mcp/mcp-server-simple.cjs"],
+      "env": {
+        "SUPABASE_URL": "https://csqxopqlgujduhmwxixo.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "[service-role-key]"
+      }
+    }
+  }
+}
 ```
 
 ## Cobros System Architecture
@@ -146,6 +224,10 @@ Layout (Header + Sidebar + Outlet)
 - **Components**: PascalCase with functional components only
 - **Services**: camelCase (e.g., `masterDataService.js`)
 - **UI Components**: shadcn/ui pattern in `src/components/ui/`
+- **Test Scripts**: Located in `test/` directory (e.g., `test/test-mcp.js`, `test/verify-table-access.cjs`)
+- **Documentation**: Organized in `docs/` directory (e.g., `docs/DEVELOPMENT.md`)
+- **MCP Servers**: Located in `mcp/` directory (e.g., `mcp/mcp-server-simple.cjs`)
+- **SQL Scripts**: Located in `sql/` directory (e.g., `sql/supabase_setup.sql`)
 
 ### State Management
 - Local state with `useState` for UI state
@@ -169,10 +251,16 @@ Layout (Header + Sidebar + Outlet)
 
 ```bash
 # Development (required: Node >=18, pnpm >=9)
-pnpm dev              # Starts Vite dev server on :5173
+pnmp dev              # Starts Vite dev server on :5173
 pnpm build            # Production build with terser minification
-pnpm build:vercel     # Vercel deployment (install + build) - Legacy
+pnmp build:vercel     # Vercel deployment (install + build) - Legacy
 pnpm lint             # ESLint validation
+
+# MCP & Database Commands
+node mcp/mcp-server-simple.cjs     # Test MCP server functionality
+node test/test-mcp.js              # Run MCP integration tests
+node test/verify-table-access.cjs  # Verify Supabase database access
+node test/setup-complete.js        # Complete project setup
 
 # Deployment Commands
 vercel --prod         # Manual production deployment
@@ -218,10 +306,12 @@ constructor() {
 ```
 
 ### Data Initialization
-MasterDataService initializes with empty arrays on first load:
-- Workers: Empty array - ready for real data input
-- Vehicles: Empty array - no demo fleet data
-- Cobros & Payments: Empty arrays - clean slate for development
+**Current State - Supabase Production Data**:
+- **Workers**: 14 real workers in Supabase PostgreSQL - ALL with "fijo" contracts
+- **Shifts**: 98+ real shift records with proper worker relationships
+- **Vehicles**: Empty array - no demo fleet data
+- **Cobros & Payments**: Empty arrays - clean slate for development
+- **Dual System**: MasterDataService + Supabase integration with localStorage fallback
 - Use `resetAllData()` method to clear existing data during development
 - Use `loadDemoData()` method to load demonstration data when needed
 
@@ -330,3 +420,52 @@ const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
 - Saturday 3rd shift pays $27,500
 - Weekday 3rd shift pays $22,500
 - All other shifts pay $20,000
+
+## Project Organization & Structure
+
+### Organized Directory Structure
+**Recent Update**: Project completely reorganized for better maintainability and clarity.
+
+```
+transapp/
+├── 📂 src/ - Main application code
+│   ├── components/, contexts/, hooks/, lib/, pages/, services/, utils/
+│
+├── 📚 docs/ - All documentation
+│   ├── DEVELOPMENT.md, PROJECT_SUMMARY.md, TUTORIAL_PAGOS.md
+│   ├── MCP_SETUP_COMPLETE.md, SUPABASE_CONFIG.md
+│
+├── 🧪 test/ - All testing and utility scripts  
+│   ├── test-mcp.js, verify-table-access.cjs
+│   ├── setup-complete.js, create-workers.js
+│   ├── update-contracts-to-fijo.cjs
+│
+├── 🔌 mcp/ - Model Context Protocol servers
+│   ├── mcp-server-simple.cjs (ACTIVE)
+│   ├── mcp-server-supabase.cjs
+│
+├── 🗄️ sql/ - Database scripts
+│   ├── supabase_setup.sql, supabase_simple.sql
+│
+└── 📁 excel_files/ - Data files
+```
+
+### Organizational Benefits
+- **Clean Root**: Configuration files only in project root
+- **Logical Grouping**: Related files grouped by function
+- **Easy Navigation**: Clear directory structure with READMEs
+- **Professional Structure**: Industry-standard organization
+- **Maintainable**: Easy to find and update files
+
+### Updated File Paths
+- **MCP Server**: `mcp/mcp-server-simple.cjs` (updated in mcp.json)
+- **Tests**: All scripts moved to `test/` directory
+- **Documentation**: Centralized in `docs/` directory
+- **SQL Scripts**: Organized in `sql/` directory
+
+### README Files Added
+Each major directory now contains a README.md explaining:
+- Purpose and contents of the directory
+- How to use files in that directory  
+- Relationships to other parts of the project
+- Development and testing instructions

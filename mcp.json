@@ -1,0 +1,74 @@
+{
+  "mcpServers": {
+    "transapp-supabase": {
+      "command": "node",
+      "args": ["mcp/mcp-server-simple.cjs"],
+      "env": {
+        "SUPABASE_URL": "https://csqxopqlgujduhmwxixo.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzcXhvcHFsZ3VqZHVobXd4aXhvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NzM1NDkzMywiZXhwIjoyMDcyOTMwOTMzfQ.sKq7WvocXEyL9l5BcRsZOfJFnf9ZaRlOYL0acfUg5II"
+      }
+    }
+  },
+  "project": {
+    "name": "TransApp",
+    "description": "Sistema de gestión de transporte con módulos de trabajadores, vehículos, turnos y pagos",
+    "version": "1.0.0",
+    "architecture": {
+      "frontend": "React 19 + Vite + Tailwind CSS",
+      "database": "Supabase PostgreSQL",
+      "persistence": "localStorage (fallback) + Supabase (principal)",
+      "auth": "Supabase Auth + contexto local"
+    },
+    "modules": {
+      "trabajadores": {
+        "status": "planning",
+        "priority": "high",
+        "features": ["CRUD individual", "validación RUT", "gestión estados", "carga masiva"]
+      },
+      "turnos": {
+        "status": "planning", 
+        "priority": "high",
+        "features": ["calendario interactivo", "drag & drop", "plantillas", "exportación Excel"]
+      },
+      "cobros": {
+        "status": "completed",
+        "priority": "maintenance",
+        "features": ["facturación por turnos", "exportación profesional", "cálculos automáticos"]
+      },
+      "pagos": {
+        "status": "completed",
+        "priority": "maintenance", 
+        "features": ["cálculos salariales", "filtros temporales", "validaciones de fechas"]
+      }
+    }
+  },
+  "supabase": {
+    "tables": {
+      "trabajadores": {
+        "columns": ["id", "nombre", "rut", "cargo", "telefono", "estado", "created_at", "updated_at"],
+        "rls": true,
+        "indexes": ["rut", "estado", "nombre"]
+      },
+      "turnos": {
+        "columns": ["id", "trabajador_id", "fecha", "turno_tipo", "estado", "created_at"],
+        "rls": true,
+        "indexes": ["trabajador_id", "fecha", "turno_tipo"],
+        "foreign_keys": ["trabajador_id -> trabajadores.id"]
+      }
+    }
+  },
+  "development": {
+    "commands": {
+      "dev": "pnpm dev",
+      "build": "pnpm build", 
+      "deploy": "vercel --prod",
+      "supabase:init": "npx supabase init",
+      "supabase:start": "npx supabase start"
+    },
+    "environment": {
+      "node": ">=18",
+      "pnpm": ">=9",
+      "vscode": "recommended extensions: ES7+ React/Redux/React-Native snippets, Tailwind CSS IntelliSense"
+    }
+  }
+}
