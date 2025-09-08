@@ -15,13 +15,10 @@ import {
   Phone,
   Save,
   X,
-  RefreshCw,
-  Trash2,
-  AlertTriangle
+  RefreshCw
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import AddWorkerModal from '../components/AddWorkerModal'
+import supabaseIntegrationService from '@/services/supabaseIntegrationService'
 
 const Workers = () => {
   const [workers, setWorkers] = useState([])
@@ -32,39 +29,21 @@ const Workers = () => {
   const [filterStatus, setFilterStatus] = useState('all')
   const [editingWorker, setEditingWorker] = useState(null)
   const [editForm, setEditForm] = useState({})
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [isCreating, setIsCreating] = useState(false)
-  const [workerToDelete, setWorkerToDelete] = useState(null)
-  const [isDeleting, setIsDeleting] = useState(false)
 
-  // Conexión directa a Supabase
-  const supabase = createClient(
-    'https://csqxopqlgujduhmwxixo.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzcXhvcHFsZ3VqZHVobXd4aXhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTczNTQ5MzMsImV4cCI6MjA3MjkzMDkzM30.zUiZNsHWFBIqH4KMNSyTE-g68f_t-rpdnpt7VNJ5DSs'
-  )
-
-  // Cargar trabajadores directamente desde Supabase
+  // Cargar trabajadores desde Supabase
   const loadWorkers = async () => {
     try {
       setLoading(true)
-      console.log('🔄 Cargando trabajadores directamente desde Supabase...')
+      console.log('🔄 Cargando trabajadores desde Supabase...')
       
-      const { data, error } = await supabase
-        .from('trabajadores')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const workersData = await supabaseIntegrationService.getWorkers()
+      console.log('📊 Trabajadores cargados:', workersData.length)
       
-      if (error) {
-        throw error
-      }
-      
-      console.log('✅ Trabajadores cargados exitosamente:', data?.length || 0)
-      console.log('📋 Datos:', data)
-      
-      setWorkers(data || [])
-      setFilteredWorkers(data || [])
+      setWorkers(workersData)
+      setFilteredWorkers(workersData)
     } catch (error) {
       console.error('❌ Error cargando trabajadores:', error)
+      // En caso de error, intentar con array vacío
       setWorkers([])
       setFilteredWorkers([])
     } finally {
@@ -118,22 +97,22 @@ const Workers = () => {
     try {
       console.log('💾 Guardando trabajador editado:', editForm)
       
-      const { data, error } = await supabase
-        .from('trabajadores')
-        .update({
-          nombre: editForm.nombre,
-          contrato: editForm.contrato,
-          telefono: editForm.telefono,
-          estado: editForm.estado
-        })
-        .eq('id', editingWorker)
-        .select()
-      
-      if (error) {
-        throw error
+      // Buscar el trabajador actual
+      const currentWorker = workers.find(w => w.id === editingWorker)
+      if (!currentWorker) {
+        alert('Error: Trabajador no encontrado')
+        return
       }
       
-      console.log('✅ Trabajador actualizado:', data)
+      // Preparar datos actualizados
+      const updatedWorker = {
+        ...currentWorker,
+        ...editForm,
+        id: editingWorker
+      }
+      
+      const savedWorker = await supabaseIntegrationService.saveWorker(updatedWorker)
+      console.log('✅ Trabajador actualizado:', savedWorker)
       
       // Recargar datos y limpiar formulario
       await loadWorkers()
@@ -145,100 +124,24 @@ const Workers = () => {
     }
   }
 
-  // Crear nuevo trabajador
-  const createWorker = async (workerData) => {
-    try {
-      setIsCreating(true)
-      console.log('👤 Creando nuevo trabajador:', workerData)
-      
-      // Verificar que el RUT no exista
-      const { data: existingWorker } = await supabase
-        .from('trabajadores')
-        .select('id, rut')
-        .eq('rut', workerData.rut)
-        .single()
-      
-      if (existingWorker) {
-        throw new Error('Ya existe un trabajador con este RUT')
-      }
-      
-      const { data, error } = await supabase
-        .from('trabajadores')
-        .insert([workerData])
-        .select()
-      
-      if (error) {
-        throw error
-      }
-      
-      console.log('✅ Trabajador creado exitosamente:', data)
-      
-      // Recargar datos y cerrar modal
-      await loadWorkers()
-      setIsAddModalOpen(false)
-      
-      // Mostrar mensaje de éxito
-      alert('Trabajador creado exitosamente')
-    } catch (error) {
-      console.error('❌ Error creando trabajador:', error)
-      alert('Error creando trabajador: ' + error.message)
-    } finally {
-      setIsCreating(false)
-    }
-  }
-
   // Cambiar estado (activar/desactivar)
   const toggleWorkerStatus = async (worker) => {
     try {
       const newStatus = worker.estado === 'activo' ? 'inactivo' : 'activo'
       console.log('🔄 Cambiando estado del trabajador:', worker.nombre, 'a', newStatus)
       
-      const { data, error } = await supabase
-        .from('trabajadores')
-        .update({ estado: newStatus })
-        .eq('id', worker.id)
-        .select()
-      
-      if (error) {
-        throw error
+      const updatedWorker = {
+        ...worker,
+        estado: newStatus
       }
       
-      console.log('✅ Estado actualizado:', data)
+      const savedWorker = await supabaseIntegrationService.saveWorker(updatedWorker)
+      console.log('✅ Estado actualizado:', savedWorker)
+      
       await loadWorkers()
     } catch (error) {
       console.error('❌ Error cambiando estado:', error)
       alert('Error cambiando estado: ' + error.message)
-    }
-  }
-
-  // Eliminar trabajador permanentemente
-  const deleteWorker = async (worker) => {
-    try {
-      setIsDeleting(true)
-      console.log('🗑️ Eliminando trabajador permanentemente:', worker.nombre)
-      
-      const { error } = await supabase
-        .from('trabajadores')
-        .delete()
-        .eq('id', worker.id)
-      
-      if (error) {
-        throw error
-      }
-      
-      console.log('✅ Trabajador eliminado permanentemente')
-      
-      // Recargar datos y cerrar modal
-      await loadWorkers()
-      setWorkerToDelete(null)
-      
-      // Mostrar mensaje de confirmación
-      alert(`Trabajador "${worker.nombre}" eliminado permanentemente`)
-    } catch (error) {
-      console.error('❌ Error eliminando trabajador:', error)
-      alert('Error eliminando trabajador: ' + error.message)
-    } finally {
-      setIsDeleting(false)
     }
   }
 
@@ -291,14 +194,6 @@ const Workers = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
-            disabled={loading || isCreating}
-          >
-            <Plus className="h-4 w-4" />
-            Agregar Trabajador
-          </Button>
           <Button 
             onClick={loadWorkers} 
             variant="outline"
@@ -501,12 +396,12 @@ const Workers = () => {
                             <option value="planta">Planta</option>
                           </select>
                         ) : (
-                          <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             worker.contrato === 'fijo' 
-                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              ? 'bg-blue-100 text-blue-800'
                               : worker.contrato === 'planta'
-                              ? 'bg-green-50 text-green-700 border border-green-200'
-                              : 'bg-orange-50 text-orange-700 border border-orange-200'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-orange-100 text-orange-800'
                           }`}>
                             {worker.contrato}
                           </span>
@@ -541,17 +436,19 @@ const Workers = () => {
                             <option value="inactivo">Inactivo</option>
                           </select>
                         ) : (
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             worker.estado === 'activo'
-                              ? 'bg-green-50 text-green-700 border border-green-200'
-                              : 'bg-red-50 text-red-700 border border-red-200'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
                           }`}>
-                            {worker.estado === 'activo' ? (
-                              <UserCheck className="h-3 w-3" />
-                            ) : (
-                              <UserX className="h-3 w-3" />
-                            )}
-                            {worker.estado}
+                            <div className="flex items-center gap-1">
+                              {worker.estado === 'activo' ? (
+                                <UserCheck className="h-3 w-3" />
+                              ) : (
+                                <UserX className="h-3 w-3" />
+                              )}
+                              {worker.estado}
+                            </div>
                           </span>
                         )}
                       </td>
@@ -609,18 +506,6 @@ const Workers = () => {
                                 <UserCheck className="h-3 w-3" />
                               )}
                             </Button>
-                            {/* Botón eliminar solo para trabajadores inactivos */}
-                            {worker.estado === 'inactivo' && (
-                              <Button 
-                                size="sm" 
-                                variant="destructive"
-                                onClick={() => setWorkerToDelete(worker)}
-                                className="h-8 w-8 p-0"
-                                title="Eliminar permanentemente"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            )}
                           </div>
                         )}
                       </td>
@@ -632,86 +517,6 @@ const Workers = () => {
           )}
         </CardContent>
       </Card>
-
-      {/* Modal para agregar trabajador */}
-      <AddWorkerModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onSave={createWorker}
-        isSaving={isCreating}
-      />
-
-      {/* Modal de confirmación para eliminar trabajador */}
-      {workerToDelete && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-md bg-white shadow-2xl">
-            <CardHeader className="pb-4">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-12 h-12 bg-red-100 rounded-full">
-                  <AlertTriangle className="h-6 w-6 text-red-600" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg text-red-600">
-                    Eliminar Trabajador
-                  </CardTitle>
-                  <CardDescription>
-                    Esta acción no se puede deshacer
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm">
-                    <p className="font-medium text-red-800 mb-1">
-                      ⚠️ Advertencia Importante
-                    </p>
-                    <p className="text-red-700">
-                      Estás a punto de eliminar permanentemente al trabajador{' '}
-                      <strong>"{workerToDelete.nombre}"</strong>. 
-                    </p>
-                    <p className="text-red-700 mt-1">
-                      Esta acción eliminará todos los datos relacionados y{' '}
-                      <strong>NO SE PUEDE DESHACER</strong>.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setWorkerToDelete(null)}
-                  disabled={isDeleting}
-                  className="flex-1"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => deleteWorker(workerToDelete)}
-                  disabled={isDeleting}
-                  className="flex-1"
-                >
-                  {isDeleting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Eliminando...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Eliminar Permanentemente
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   )
 }

@@ -40,7 +40,7 @@ class SupabaseIntegrationService {
         if (error) throw error
 
         // Convertir formato Supabase a formato aplicación
-        const workers = data.map(this.mapSupabaseToAppWorker)
+        const workers = data.map(worker => this.mapSupabaseToAppWorker(worker))
         
         // Guardar en localStorage como backup
         persistentStorage.store('workers', workers)
@@ -214,8 +214,15 @@ class SupabaseIntegrationService {
   mapSupabaseToAppWorker(supabaseWorker) {
     return {
       id: supabaseWorker.id,
-      name: supabaseWorker.nombre,
+      nombre: supabaseWorker.nombre,
       rut: supabaseWorker.rut,
+      contrato: supabaseWorker.contrato || 'eventual',
+      telefono: supabaseWorker.telefono || '',
+      estado: supabaseWorker.estado || 'activo',
+      created_at: supabaseWorker.created_at,
+      updated_at: supabaseWorker.updated_at,
+      // Mantener compatibilidad con formato anterior
+      name: supabaseWorker.nombre,
       contract: supabaseWorker.contrato || 'eventual',
       phone: supabaseWorker.telefono || '',
       status: supabaseWorker.estado === 'activo' ? 'Activo' : 'Inactivo',
@@ -226,11 +233,11 @@ class SupabaseIntegrationService {
   // Aplicación → Supabase (Worker)  
   mapAppToSupabaseWorker(appWorker) {
     return {
-      nombre: appWorker.name || appWorker.nombre,
+      nombre: appWorker.nombre || appWorker.name,
       rut: appWorker.rut,
-      contrato: appWorker.contract || appWorker.contrato || 'eventual',
-      telefono: appWorker.phone || appWorker.telefono || '',
-      estado: (appWorker.status === 'Activo' || appWorker.estado === 'activo') ? 'activo' : 'inactivo'
+      contrato: appWorker.contrato || appWorker.contract || 'eventual',
+      telefono: appWorker.telefono || appWorker.phone || '',
+      estado: appWorker.estado || (appWorker.status === 'Activo' ? 'activo' : 'inactivo')
     }
   }
 
