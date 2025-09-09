@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import UploadFiles from './pages/UploadFiles'
 import Workers from './pages/Workers'
+import Turnos from './pages/Turnos'
 import Vehicles from './pages/Vehicles'
 import Cobros from './pages/Cobros'
 import Payments from './pages/Payments'
@@ -52,6 +53,7 @@ const AppRoutes = () => {
         <Route index element={<Dashboard />} />
         <Route path="upload" element={<UploadFiles />} />
         <Route path="workers" element={<Workers />} />
+        <Route path="turnos" element={<Turnos />} />
         <Route path="vehicles" element={<Vehicles />} />
         <Route path="cobros" element={<Cobros />} />
         <Route path="payments" element={<Payments />} />

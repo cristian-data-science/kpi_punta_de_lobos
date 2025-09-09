@@ -499,3 +499,108 @@ Each major directory now contains a README.md explaining:
 - How to use files in that directory  
 - Relationships to other parts of the project
 - Development and testing instructions
+
+## Turnos (Shifts) Management System
+
+### Comprehensive Turnos Module (COMPLETED)
+**Location**: `src/pages/Turnos.jsx` (710+ lines) - Complete shift management interface with calendar and table views
+
+### Core Features Implemented
+- **Full CRUD Operations**: Create, Read, Update, Delete shifts with complete validation
+- **Dual View System**: Calendar view (grid) and Table view (list) with toggle button
+- **Date Restrictions**: Only allow editing yesterday, today, and future dates
+- **Name Formatting**: Chilean naming convention (primer nombre + primer apellido)
+- **Bulk Operations**: Select all, copy week functionality, delete multiple shifts
+- **Status Management**: Visual check marks for "programado" status instead of badges
+- **Rate Integration**: Dynamic tariff calculation based on shift type and date
+
+### Turnos Components Architecture
+- **Turnos.jsx**: Main interface with calendar/table toggle and CRUD operations
+- **AddShiftModal.jsx**: Worker assignment modal with date restrictions and validation
+- **CopyShiftModal.jsx**: Weekly shift copying system (lunes to domingo)
+- **Badge Component**: UI component for status display (`src/components/ui/badge.jsx`)
+- **Checkbox Component**: Selection controls (`src/components/ui/checkbox.jsx`)
+
+### Key Technical Features
+- **Calendar Integration**: 7-day week view with proper date handling
+- **Worker Selection**: Dropdown with formatted names and availability checking
+- **Shift Types**: primer_turno, segundo_turno, tercer_turno with rate calculations
+- **State Management**: Real-time UI updates with optimistic rendering
+- **Direct Supabase Integration**: Uses createClient for reliable database operations
+- **Validation System**: Date restrictions, worker availability, required fields
+
+### Advanced Functionality
+- **Weekly Copy System**: Copy entire weeks from lunes to domingo
+- **Format Worker Names**: `formatWorkerName()` function shows "Juan López" format
+- **Date Editing Rules**: `isDateEditable()` prevents editing past dates (except yesterday)
+- **Bulk Selection**: Checkbox system for multiple shift operations
+- **Dynamic Rates**: Integration with tariff system from Calendar/Cobros modules
+
+### UI/UX Features
+- **View Toggle**: Switch between Calendar (grid) and Table (list) views
+- **Professional Design**: Consistent with TransApp theme (blue/orange gradients)
+- **Loading States**: Visual feedback during all operations
+- **Error Handling**: Comprehensive error messages and validation
+- **Responsive Design**: Mobile-friendly interface with proper breakpoints
+
+## Login Security System
+
+### Login Attempt Limiting System (NEW)
+**Configuration**: `src/config/loginConfig.js` - Central security configuration file
+
+### Core Security Features
+- **Max Attempts Limit**: Configurable maximum login attempts (default: 3)
+- **Account Lockout**: Temporary user lockout after exceeding attempts
+- **Lockout Duration**: Configurable lockout time (default: 15 minutes)
+- **Easy Toggle**: Simple true/false to enable/disable entire system
+- **Visual Feedback**: Progressive warnings and attempt counters
+
+### Login Security Configuration
+```javascript
+// src/config/loginConfig.js
+export const LOGIN_CONFIG = {
+  loginAttemptsEnabled: true,    // Easy on/off toggle
+  maxLoginAttempts: 3,           // Maximum attempts allowed
+  lockoutDuration: 15,           // Minutes of lockout
+  resetAttemptsOnSuccess: true,  // Reset counter on successful login
+  showAttemptsRemaining: true    // Show remaining attempts to user
+}
+```
+
+### Enhanced Authentication System
+- **AuthContext Enhanced**: Extended with attempt tracking and lockout logic
+- **Login Component Updated**: Progressive UI feedback and lockout display
+- **Persistent Storage**: localStorage-based attempt tracking and lockout data
+- **Automatic Recovery**: Lockout expires automatically after configured time
+- **Security Documentation**: Complete guide in `docs/LOGIN_SECURITY.md`
+
+### User Experience Features
+- **Progressive Warnings**: "Te quedan X intentos" with visual indicators
+- **Lockout Notification**: Clear messaging during account lockout
+- **Disabled UI**: Button becomes disabled and shows lockout status
+- **Color-coded Alerts**: Orange for warnings, red for lockout, green for success
+- **Attempt Counter**: Real-time display of remaining attempts
+
+### Technical Implementation
+- **Enhanced AuthContext**: `src/contexts/AuthContext.jsx` with attempt tracking
+- **Updated Login Page**: `src/pages/Login.jsx` with security UI elements
+- **Configuration System**: Centralized config with easy enable/disable
+- **Data Persistence**: Uses localStorage with `transapp-` prefixed keys
+- **Automatic Cleanup**: Expired lockouts automatically cleared on app load
+
+### Quick Configuration Changes
+**To Disable System**:
+```javascript
+loginAttemptsEnabled: false,  // No limits, normal login
+```
+
+**To Enable System**:
+```javascript
+loginAttemptsEnabled: true,   // Full security system active
+```
+
+**Custom Limits**:
+```javascript
+maxLoginAttempts: 5,          // Allow 5 attempts instead of 3
+lockoutDuration: 30,          // 30-minute lockout instead of 15
+```

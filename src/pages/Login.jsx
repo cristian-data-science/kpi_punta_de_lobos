@@ -21,7 +21,14 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
+  const { 
+    login, 
+    loginAttempts, 
+    isLocked, 
+    remainingAttempts, 
+    maxAttempts, 
+    isLimitEnabled 
+  } = useAuth()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -142,23 +149,61 @@ const Login = () => {
 
               {/* Error Message */}
               {error && (
-                <Alert className="border-red-200 bg-red-50">
-                  <AlertDescription className="text-red-700 text-sm">
+                <Alert className={`border-red-200 ${isLocked ? 'bg-red-100' : 'bg-red-50'}`}>
+                  <AlertDescription className={`text-red-700 text-sm ${isLocked ? 'font-semibold' : ''}`}>
                     {error}
                   </AlertDescription>
                 </Alert>
               )}
 
+              {/* Información de Intentos de Login */}
+              {isLimitEnabled && !isLocked && loginAttempts > 0 && (
+                <Alert className="border-orange-200 bg-orange-50">
+                  <Shield className="h-4 w-4 text-orange-600" />
+                  <AlertDescription className="text-orange-700 text-sm">
+                    {remainingAttempts === 1 
+                      ? `⚠️ Último intento disponible antes del bloqueo` 
+                      : `Intentos restantes: ${remainingAttempts} de ${maxAttempts}`}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Estado de Usuario Bloqueado */}
+              {isLocked && (
+                <Alert className="border-red-300 bg-red-100">
+                  <Lock className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-800 text-sm font-medium">
+                    🔒 Usuario bloqueado por seguridad. Espera para intentar nuevamente.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Información del Sistema de Límites */}
+              {isLimitEnabled && loginAttempts === 0 && !error && (
+                <div className="text-xs text-gray-500 text-center">
+                  Sistema de seguridad activo: máximo {maxAttempts} intentos permitidos
+                </div>
+              )}
+
               {/* Botón de Login */}
               <Button
                 type="submit"
-                disabled={loading}
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700 text-white font-medium rounded-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg"
+                disabled={loading || isLocked}
+                className={`w-full h-12 font-medium rounded-lg transition-all duration-200 shadow-lg ${
+                  isLocked 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700 transform hover:scale-[1.02]'
+                } text-white`}
               >
                 {loading ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
                     Verificando...
+                  </div>
+                ) : isLocked ? (
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-4 w-4" />
+                    Usuario Bloqueado
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">

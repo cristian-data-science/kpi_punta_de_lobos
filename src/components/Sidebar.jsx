@@ -4,6 +4,7 @@ import {
   LayoutDashboard, 
   Upload, 
   Users, 
+  Clock,
   Truck, 
   Receipt,
   DollarSign, 
@@ -75,6 +76,12 @@ const Sidebar = ({ isOpen, onClose }) => {
       icon: Users, 
       label: 'Trabajadores',
       description: 'Gestión de personal'
+    },
+    { 
+      path: '/turnos', 
+      icon: Clock, 
+      label: 'Turnos',
+      description: 'Gestión de turnos'
     },
     { 
       path: '/vehicles', 

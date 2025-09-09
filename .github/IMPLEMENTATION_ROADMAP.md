@@ -1,8 +1,8 @@
 # 📋 TransApp - Roadmap de Implementación
 ## Módulos Trabajadores y Turnos con Integración Supabase
 
-**Estado general**: � **En progreso**  
-**Progreso total**: 1/15 tareas principales (6.7%)
+**Estado general**: ✅ **Avance significativo**  
+**Progreso total**: 8/15 tareas principales (53.3%)
 
 ---
 
@@ -231,5 +231,57 @@
 - Configurar políticas RLS adecuadas para seguridad
 - Implementar índices para optimizar consultas de calendario
 
+---
+
+## ✅ **MÓDULOS COMPLETADOS (NUEVOS)**
+
+### 16. Sistema de Turnos Completo
+**Estado**: ✅ **COMPLETADO**  
+**Fecha**: 8 de septiembre de 2025  
+**Prioridad**: Alta  
+
+**Funcionalidades Implementadas:**
+- [x] ✅ Página principal `Turnos.jsx` (710+ líneas) con interfaz completa
+- [x] ✅ Dual view system: Vista calendario (grid) y vista tabla (list)
+- [x] ✅ CRUD completo: Crear, editar, eliminar turnos con validación
+- [x] ✅ `AddShiftModal.jsx`: Modal de asignación de trabajadores con restricciones de fecha
+- [x] ✅ `CopyShiftModal.jsx`: Sistema de copia semanal (lunes a domingo)
+- [x] ✅ Formateo de nombres chilenos: primer nombre + primer apellido
+- [x] ✅ Restricciones de fecha: solo editar ayer, hoy y futuro
+- [x] ✅ Operaciones masivas: seleccionar todos, copiar semana, eliminar múltiples
+- [x] ✅ Integración directa con Supabase para operaciones en tiempo real
+- [x] ✅ Sistema de check marks verdes para estado "programado"
+- [x] ✅ Integración con sistema de tarifas del Calendar y Cobros
+
+### 17. Sistema de Seguridad de Login
+**Estado**: ✅ **COMPLETADO**  
+**Fecha**: 8 de septiembre de 2025  
+**Prioridad**: Media  
+
+**Funcionalidades Implementadas:**
+- [x] ✅ Archivo de configuración `src/config/loginConfig.js` para activar/desactivar
+- [x] ✅ Límite configurable de intentos (por defecto: 3 intentos)
+- [x] ✅ Bloqueo temporal configurable (por defecto: 15 minutos)
+- [x] ✅ Enhanced AuthContext con tracking de intentos y lógica de bloqueo
+- [x] ✅ UI actualizada en Login.jsx con alertas progresivas
+- [x] ✅ Feedback visual: contador de intentos, alertas de color, botón deshabilitado
+- [x] ✅ Persistencia en localStorage con prefijo `transapp-`
+- [x] ✅ Recuperación automática al expirar tiempo de bloqueo
+- [x] ✅ Documentación completa en `docs/LOGIN_SECURITY.md`
+- [x] ✅ Activación/desactivación súper fácil con un simple true/false
+
+### 18. Actualización de Copilot Instructions
+**Estado**: ✅ **COMPLETADO**  
+**Fecha**: 8 de septiembre de 2025  
+
+**Funcionalidades Implementadas:**
+- [x] ✅ Documentación completa del sistema de Turnos
+- [x] ✅ Documentación del sistema de Login Security
+- [x] ✅ Actualización de arquitectura de componentes
+- [x] ✅ Nuevos patrones de desarrollo y configuración
+
+---
+
 ### **Historial de Cambios:**
 - **Versión 1.0**: Creación inicial del roadmap de implementación
+- **Versión 1.1**: Actualización con módulos de Turnos y Login Security completados (53.3% progreso total)
