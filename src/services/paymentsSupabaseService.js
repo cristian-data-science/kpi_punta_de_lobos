@@ -136,7 +136,7 @@ class PaymentsSupabaseService {
   /**
    * 🔄 Cargar turnos COMPLETADOS desde Supabase con información del trabajador
    * Solo cuenta turnos con estado 'completado' para el pago
-   * Reemplaza masterDataService.getWorkerShifts()
+   * IMPORTANTE: Usa el campo 'pago' directamente sin recalcular tarifas
    */
   async loadTurnosFromSupabase() {
     try {
@@ -161,7 +161,7 @@ class PaymentsSupabaseService {
       }
 
       console.log(`✅ ${turnos.length} turnos COMPLETADOS cargados desde Supabase`)
-      console.log('💡 Nota: Solo se incluyen turnos con estado "completado" para el cálculo de pagos')
+      console.log('� Usando campo "pago" guardado en BD - NO recalcula tarifas')
       
       // Transformar datos de Supabase al formato esperado por la lógica de pagos
       const turnosTransformados = turnos.map(turno => ({
@@ -169,7 +169,8 @@ class PaymentsSupabaseService {
         fecha: turno.fecha,
         conductorNombre: turno.trabajador?.nombre || 'Trabajador no encontrado',
         turno: this.mapTurnoType(turno.turno_tipo), // Convertir de turno_tipo a formato legacy
-        estado: turno.estado  // Siempre será 'completado' debido al filtro
+        estado: turno.estado,  // Siempre será 'completado' debido al filtro
+        pago: turno.pago || 0  // ✅ USAR PAGO GUARDADO EN SUPABASE
       }))
 
       return turnosTransformados
@@ -215,26 +216,25 @@ class PaymentsSupabaseService {
         return []
       }
 
-      // 3. Procesar cálculos de pagos con tarifas de Supabase
+      // 3. Procesar cálculos de pagos usando campo 'pago' de Supabase
       const paymentCalculations = new Map()
 
-      // Procesar todos los turnos de forma asíncrona
+      // Procesar todos los turnos usando el pago guardado en BD
       for (const turno of turnos) {
         // Filtrar por workerId si se especifica
         if (workerId && turno.conductorNombre !== workerId) continue
 
         const conductorNombre = turno.conductorNombre
         const fecha = turno.fecha
-        const turnoNumber = this.getTurnoNumber(turno.turno)
         
-        // Usar la nueva función que obtiene tarifas desde Supabase
-        const tarifa = await this.calculateShiftRateFromSupabase(fecha, turnoNumber)
+        // ✅ USAR PAGO GUARDADO EN SUPABASE - NO RECALCULAR
+        const pago = turno.pago || 0
 
-        // Determinar tipo de día - usar timezone local para consistencia
+        // Determinar tipo de día SOLO para estadísticas - usar timezone local
         const [year, month, day] = fecha.split('-')
         const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
         const dayOfWeek = dateObj.getDay()
-        const isHoliday = calendarConfig.holidays.includes(fecha)
+        const isHoliday = calendarConfig?.holidays?.includes(fecha) || false
         const isSunday = dayOfWeek === 0
 
         // Inicializar trabajador si no existe
@@ -262,14 +262,15 @@ class PaymentsSupabaseService {
 
         const calculation = paymentCalculations.get(conductorNombre)
         calculation.totalTurnos++
-        calculation.totalMonto += tarifa
+        calculation.totalMonto += pago  // ✅ USAR PAGO DE SUPABASE
 
-        // Contar feriados y domingos
+        // Contar feriados y domingos para estadísticas
         if (isHoliday && !isSunday) calculation.feriadosTrabajados++
         if (isSunday) calculation.domingosTrabajados++
 
         // Determinar categoría de día para desglose
         let categoriasDia = 'Días normales'
+        const turnoNumber = this.getTurnoNumber(turno.turno)
         if (isSunday) {
           categoriasDia = 'Domingos'
         } else if (isHoliday) {
@@ -278,34 +279,34 @@ class PaymentsSupabaseService {
           categoriasDia = 'Sábados 3er turno'
         }
 
-        // Agregar turno individual
+        // Agregar turno individual usando pago guardado
         calculation.turnos.push({
           fecha,
           turno: turno.turno,
-          tarifa,
+          tarifa: pago,  // ✅ USAR PAGO GUARDADO
           isHoliday,
           isSunday,
           dayOfWeek,
           categoriasDia
         })
 
-        // Actualizar desglose por tipo
+        // Actualizar desglose por tipo usando pago guardado
         if (calculation.desglosePorTipo[turno.turno]) {
           calculation.desglosePorTipo[turno.turno].cantidad++
-          calculation.desglosePorTipo[turno.turno].monto += tarifa
+          calculation.desglosePorTipo[turno.turno].monto += pago  // ✅ USAR PAGO
         }
 
-        // Actualizar desglose por día
+        // Actualizar desglose por día usando pago guardado
         if (calculation.desglosePorDia[categoriasDia]) {
           calculation.desglosePorDia[categoriasDia].cantidad++
-          calculation.desglosePorDia[categoriasDia].monto += tarifa
+          calculation.desglosePorDia[categoriasDia].monto += pago  // ✅ USAR PAGO
         }
       }
 
       const result = Array.from(paymentCalculations.values())
       console.log(`✅ Cálculo de pagos completado: ${result.length} trabajadores procesados`)
       console.log(`📊 Total turnos COMPLETADOS procesados: ${turnos.length}`)
-      console.log('💰 Solo turnos con estado "completado" generan pagos')
+      console.log('💰 USANDO CAMPO "PAGO" GUARDADO - NO recalcula con tarifas actuales')
       
       return result
 

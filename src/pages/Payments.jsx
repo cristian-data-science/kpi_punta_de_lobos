@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import masterDataService from '../services/masterDataService'
+import paymentsSupabaseService from '../services/paymentsSupabaseService'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import ExcelJS from 'exceljs'
@@ -20,6 +21,7 @@ function Payments() {
   const [workerPayments, setWorkerPayments] = useState([])
   const [expandedWorkers, setExpandedWorkers] = useState(new Set())
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [loading, setLoading] = useState(false) // Estado de carga
   
   // Estados para el filtro de mes
   const [viewMode, setViewMode] = useState('total') // 'total' o 'monthly'
@@ -62,15 +64,27 @@ function Payments() {
     return weekNumber
   }
 
-  // Cargar datos de pagos - SOLO VISTA TOTAL
-  const loadPaymentData = () => {
-    const payments = masterDataService.calculateWorkerPayments()
-    setWorkerPayments(payments)
-    setLastUpdate(new Date())
-    
-    // Si estamos en modo mensual y hay un mes seleccionado, filtrar
-    if (viewMode === 'monthly' && selectedMonth) {
-      filterPaymentsByMonth(payments, selectedMonth)
+  // Cargar datos de pagos - USANDO SUPABASE
+  const loadPaymentData = async () => {
+    setLoading(true)
+    try {
+      console.log('💰 Cargando datos de pagos desde Supabase...')
+      
+      const payments = await paymentsSupabaseService.calculateWorkerPayments()
+      setWorkerPayments(payments)
+      setLastUpdate(new Date())
+      
+      console.log(`✅ Pagos cargados: ${payments.length} trabajadores procesados`)
+      
+      // Si estamos en modo mensual y hay un mes seleccionado, filtrar
+      if (viewMode === 'monthly' && selectedMonth) {
+        filterPaymentsByMonth(payments, selectedMonth)
+      }
+    } catch (error) {
+      console.error('❌ Error cargando datos de pagos:', error)
+      setWorkerPayments([])
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -95,29 +109,31 @@ function Payments() {
 
       if (turnosDelMes.length === 0) return null
 
-      // Recalcular estadísticas para el mes
-      const totalMonto = turnosDelMes.reduce((sum, turno) => sum + turno.tarifa, 0)
+      // Recalcular estadísticas para el mes usando campo 'pago' guardado
+      const totalMonto = turnosDelMes.reduce((sum, turno) => sum + (turno.tarifa || 0), 0)
       const feriadosTrabajados = turnosDelMes.filter(turno => turno.isHoliday && !turno.isSunday).length
       const domingosTrabajados = turnosDelMes.filter(turno => turno.isSunday).length
 
-      // Recalcular desgloses
+      // Recalcular desgloses usando pagos guardados
       const desglosePorTipo = {}
       const desglosePorDia = {}
 
       turnosDelMes.forEach(turno => {
+        const pagoTurno = turno.tarifa || 0  // 'tarifa' viene del campo 'pago' de Supabase
+        
         // Por tipo de turno
         if (!desglosePorTipo[turno.turno]) {
           desglosePorTipo[turno.turno] = { cantidad: 0, monto: 0 }
         }
         desglosePorTipo[turno.turno].cantidad++
-        desglosePorTipo[turno.turno].monto += turno.tarifa
+        desglosePorTipo[turno.turno].monto += pagoTurno
 
         // Por tipo de día
         if (!desglosePorDia[turno.categoriasDia]) {
           desglosePorDia[turno.categoriasDia] = { cantidad: 0, monto: 0 }
         }
         desglosePorDia[turno.categoriasDia].cantidad++
-        desglosePorDia[turno.categoriasDia].monto += turno.tarifa
+        desglosePorDia[turno.categoriasDia].monto += pagoTurno
       })
 
       return {
@@ -646,6 +662,20 @@ function Payments() {
     }
   }
 
+  // Mostrar indicador de carga si está cargando y no hay datos
+  if (loading && workerPayments.length === 0) {
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Cargando datos de pagos desde Supabase...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (workerPayments.length === 0) {
     return (
       <div className="space-y-6 p-6">
@@ -653,7 +683,7 @@ function Payments() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Pagos por Turnos</h1>
             <p className="text-gray-600 mt-2">
-              Cálculo automático de pagos basado en turnos trabajados y tarifas del calendario
+              Cálculo automático de pagos basado en turnos completados y tarifas del calendario
             </p>
           </div>
           <Button onClick={loadPaymentData} className="flex items-center gap-2">
@@ -665,15 +695,15 @@ function Payments() {
         <Card>
           <CardContent className="p-8 text-center">
             <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay datos de turnos</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay turnos completados</h3>
             <p className="text-gray-600 mb-4">
-              Para ver los pagos por turnos, primero necesitas registrar turnos en el calendario.
+              Para generar pagos necesitas turnos con estado "completado". Los turnos programados no generan pagos hasta que se marquen como completados.
             </p>
             <Button 
-              onClick={() => window.location.href = '/calendar'} 
+              onClick={() => window.location.href = '/turnos'} 
               className="mr-2"
             >
-              Ir al Calendario
+              Ir a Turnos
             </Button>
             <Button 
               onClick={() => window.location.href = '/upload'} 
@@ -694,7 +724,10 @@ function Payments() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Pagos por Turnos</h1>
           <p className="text-gray-600 mt-2">
-            Cálculo automático de pagos basado en turnos trabajados y tarifas del calendario
+            Cálculo automático de pagos basado en turnos <span className="font-semibold text-blue-600">completados</span> y tarifas del calendario
+          </p>
+          <p className="text-sm text-orange-600 mt-1">
+            💡 Solo los turnos marcados como "completado" generan pagos
           </p>
           {lastUpdate && (
             <p className="text-sm text-gray-500 mt-1">
@@ -910,7 +943,7 @@ function Payments() {
               const isExpanded = expandedWorkers.has(worker.conductorNombre)
               
               return (
-                <div key={worker.conductorNombre} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200">
+                <div key={worker.conductorNombre} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-150">
                   {/* Header del trabajador */}
                   <div 
                     className="p-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
@@ -1059,7 +1092,7 @@ function Payments() {
                                 {worker.turnos
                                   .sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
                                   .map((turno, turnoIndex) => (
-                                    <tr key={turnoIndex} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-all duration-200 border-b border-gray-50 last:border-b-0">
+                                    <tr key={turnoIndex} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-colors duration-150 border-b border-gray-50 last:border-b-0">
                                       <td className="py-2 px-3 font-medium text-gray-900">{turno.fecha}</td>
                                       <td className="py-2 px-3">
                                         <div className="flex items-center gap-1">
