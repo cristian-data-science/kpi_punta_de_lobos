@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import masterDataService from '../services/masterDataService'
+import cobrosSupabaseService from '../services/cobrosSupabaseService'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -23,6 +24,8 @@ import {
 function Cobros() {
   // Estados principales
   const [turnosData, setTurnosData] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [supabaseStats, setSupabaseStats] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
   
   // Estados para filtros
@@ -31,14 +34,13 @@ function Cobros() {
   const [filteredTurnos, setFilteredTurnos] = useState([])
   
   // Estados para configuración de cobros
-  const [tarifaCobro, setTarifaCobro] = useState(50000) // Tarifa por turno por defecto
+  const [tarifaCobro, setTarifaCobro] = useState(50000) // Tarifa por turno
   const [showConfig, setShowConfig] = useState(false)
   const [tempTarifa, setTempTarifa] = useState(50000)
 
   // Cargar datos iniciales
   useEffect(() => {
-    loadTurnosData()
-    loadCobroConfig()
+    loadCobroConfig().then(() => loadTurnosData())
   }, [])
 
   // Efecto para filtrar cuando cambie el período
@@ -50,32 +52,86 @@ function Cobros() {
     }
   }, [selectedPeriod, turnosData, viewMode])
 
-  // Cargar configuración de cobros desde localStorage
-  const loadCobroConfig = () => {
-    const config = localStorage.getItem('transapp_cobro_config')
-    if (config) {
-      const parsedConfig = JSON.parse(config)
-      setTarifaCobro(parsedConfig.tarifaCobro || 50000)
-      setTempTarifa(parsedConfig.tarifaCobro || 50000)
+  // Cargar configuración de cobros desde Supabase
+  const loadCobroConfig = async () => {
+    try {
+      const { data, error } = await cobrosSupabaseService.supabase
+        .from('shift_rates')
+        .select('rate_value')
+        .eq('rate_name', 'cobro_tarifa')
+        .single()
+      
+      if (error) throw error
+      
+      const tarifa = data.rate_value || 50000
+      setTarifaCobro(tarifa)
+      setTempTarifa(tarifa)
+      console.log('✅ Tarifa cargada desde Supabase:', tarifa)
+    } catch (error) {
+      console.error('❌ Error cargando tarifa desde Supabase:', error)
+      // Usar valor por defecto
+      setTarifaCobro(50000)
+      setTempTarifa(50000)
     }
   }
 
-  // Guardar configuración de cobros
-  const saveCobroConfig = () => {
-    const config = {
-      tarifaCobro: tempTarifa,
-      lastUpdate: new Date().toISOString()
+  // Guardar configuración de cobros en Supabase
+  const saveCobroConfig = async () => {
+    try {
+      setLoading(true)
+      
+      const { error } = await cobrosSupabaseService.supabase
+        .from('shift_rates')
+        .upsert({
+          rate_name: 'cobro_tarifa',
+          rate_value: tempTarifa
+        }, { onConflict: 'rate_name' })
+      
+      if (error) throw error
+      
+      setTarifaCobro(tempTarifa)
+      setShowConfig(false)
+      
+      console.log('✅ Tarifa guardada en Supabase:', tempTarifa)
+      
+      // Recargar datos
+      loadTurnosData()
+    } catch (error) {
+      console.error('❌ Error guardando tarifa en Supabase:', error)
+      alert('Error al guardar la tarifa. Inténtalo de nuevo.')
+    } finally {
+      setLoading(false)
     }
-    localStorage.setItem('transapp_cobro_config', JSON.stringify(config))
-    setTarifaCobro(tempTarifa)
-    setShowConfig(false)
   }
 
-  // Cargar datos de turnos
-  const loadTurnosData = () => {
-    const shifts = masterDataService.getWorkerShifts()
-    setTurnosData(shifts)
-    setLastUpdate(new Date())
+  // Cargar datos de turnos COMPLETADOS desde Supabase
+  const loadTurnosData = async () => {
+    setLoading(true)
+    try {
+      console.log('🔄 Cargando turnos COMPLETADOS desde Supabase para cobros...')
+      
+      // Cargar turnos completados desde Supabase
+      const turnosCompletados = await cobrosSupabaseService.loadTurnosFromSupabase()
+      setTurnosData(turnosCompletados)
+      
+      // Obtener estadísticas de Supabase
+      const stats = await cobrosSupabaseService.getSupabaseStats()
+      setSupabaseStats(stats)
+      
+      setLastUpdate(new Date())
+      
+      console.log(`✅ ${turnosCompletados.length} turnos COMPLETADOS cargados para cobros`)
+      console.log('💡 Solo los turnos completados generan cobros')
+      
+    } catch (error) {
+      console.error('❌ Error cargando datos de turnos desde Supabase:', error)
+      // Fallback a localStorage si hay error
+      console.log('🔄 Usando fallback a localStorage...')
+      const shifts = masterDataService.getWorkerShifts()
+      setTurnosData(shifts)
+    } finally {
+      setLoading(false)
+    }
   }
 
   // Filtrar turnos por período seleccionado
@@ -222,12 +278,13 @@ function Cobros() {
     return getCurrentTurnosData().length
   }
 
-  // Calcular total a cobrar
+  // Calcular total a cobrar usando valores guardados en BD
   const getTotalCobrar = () => {
-    return getTotalTurnos() * tarifaCobro
+    const currentData = getCurrentTurnosData()
+    return currentData.reduce((total, turno) => total + (turno.cobro || 0), 0)
   }
 
-  // Calcular turnos por trabajador
+  // Calcular turnos por trabajador usando cobros guardados
   const getTurnosPorTrabajador = () => {
     const currentData = getCurrentTurnosData()
     const trabajadores = new Map()
@@ -244,7 +301,7 @@ function Cobros() {
       
       const trabajador = trabajadores.get(nombre)
       trabajador.turnos++
-      trabajador.totalCobro += tarifaCobro
+      trabajador.totalCobro += (turno.cobro || 0)  // ✅ USAR COBRO GUARDADO
     })
     
     return Array.from(trabajadores.values()).sort((a, b) => b.turnos - a.turnos)
@@ -576,10 +633,33 @@ function Cobros() {
             onClick={loadTurnosData}
             variant="outline"
             className="flex items-center gap-2"
+            disabled={loading}
           >
-            <RefreshCw className="h-4 w-4" />
-            Actualizar
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Cargando...' : 'Actualizar'}
           </Button>
+        </div>
+      </div>
+
+      {/* Información sobre turnos completados */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <div className="bg-blue-500 rounded-full p-1 mt-0.5">
+            <FileText className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <h3 className="text-blue-800 font-semibold mb-1">Solo turnos completados generan cobros</h3>
+            <p className="text-blue-700 text-sm">
+              Tarifa fija de {formatCurrency(tarifaCobro)} por turno completado
+              {supabaseStats && (
+                <span className="font-medium">
+                  {' '}• Total disponible: {supabaseStats.turnosCompletados || 0} turnos completados
+                  {supabaseStats.turnosProgramados > 0 && 
+                    ` (${supabaseStats.turnosProgramados} programados no incluidos)`}
+                </span>
+              )}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -607,11 +687,18 @@ function Cobros() {
                 <p className="text-sm text-gray-600 mt-1">
                   Valor actual: {formatCurrency(tempTarifa)}
                 </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Esta tarifa se guarda en Supabase y se aplica a todos los turnos completados
+                </p>
               </div>
               <div className="flex items-end gap-2">
-                <Button onClick={saveCobroConfig} className="flex items-center gap-2">
+                <Button 
+                  onClick={saveCobroConfig} 
+                  className="flex items-center gap-2"
+                  disabled={loading}
+                >
                   <Save className="h-4 w-4" />
-                  Guardar Configuración
+                  {loading ? 'Guardando...' : 'Guardar Configuración'}
                 </Button>
                 <Button 
                   variant="outline" 
@@ -619,6 +706,7 @@ function Cobros() {
                     setTempTarifa(tarifaCobro)
                     setShowConfig(false)
                   }}
+                  disabled={loading}
                 >
                   Cancelar
                 </Button>
@@ -690,10 +778,10 @@ function Cobros() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Turnos</p>
-                <p className="text-2xl font-bold text-blue-600">{getTotalTurnos()}</p>
+                <p className="text-sm font-medium text-gray-600">Total a Cobrar</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(getTotalCobrar())}</p>
               </div>
-              <Clock className="h-8 w-8 text-blue-600" />
+              <DollarSign className="h-8 w-8 text-green-600" />
             </div>
           </CardContent>
         </Card>
@@ -702,10 +790,10 @@ function Cobros() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total a Cobrar</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(getTotalCobrar())}</p>
+                <p className="text-sm font-medium text-gray-600">Total Turnos</p>
+                <p className="text-2xl font-bold text-blue-600">{getTotalTurnos()}</p>
               </div>
-              <DollarSign className="h-8 w-8 text-green-600" />
+              <Clock className="h-8 w-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
@@ -833,7 +921,9 @@ function Cobros() {
               </div>
               <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                 <span className="text-sm font-medium text-gray-900">Tarifa configurada</span>
-                <span className="text-sm text-blue-600 font-semibold">{formatCurrency(tarifaCobro)}</span>
+                <span className="text-sm font-semibold text-blue-600">
+                  {formatCurrency(tarifaCobro)}
+                </span>
               </div>
             </div>
           </CardContent>
@@ -859,6 +949,10 @@ function Cobros() {
                 <span className="text-sm text-gray-600">
                   {viewMode === 'monthly' ? 'Mensual' : 'Semanal'}
                 </span>
+              </div>
+              <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                <span className="text-sm font-medium text-gray-900">Modo de cálculo</span>
+                <span className="text-sm font-semibold text-blue-600">Manual (Tarifa Fija)</span>
               </div>
               <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                 <span className="text-sm font-medium text-gray-900">Total de trabajadores</span>

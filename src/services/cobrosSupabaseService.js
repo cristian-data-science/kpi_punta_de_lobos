@@ -23,7 +23,7 @@ class CobrosSupabaseService {
   /**
    * 🔄 Cargar turnos COMPLETADOS desde Supabase con información del trabajador
    * Solo incluye turnos con estado 'completado' para el cálculo de cobros
-   * Reemplaza masterDataService.getWorkerShifts()
+   * IMPORTANTE: Usa el campo 'cobro' guardado sin recalcular con tarifas actuales
    */
   async loadTurnosFromSupabase() {
     try {
@@ -48,7 +48,7 @@ class CobrosSupabaseService {
       }
 
       console.log(`✅ ${turnos.length} turnos COMPLETADOS cargados desde Supabase`)
-      console.log('💡 Nota: Solo se incluyen turnos con estado "completado" para el cálculo de cobros')
+      console.log('� Usando campo "cobro" guardado en BD - NO recalcula tarifas')
       
       // Transformar datos de Supabase al formato esperado por la lógica de cobros
       const turnosTransformados = turnos.map(turno => ({
@@ -58,6 +58,7 @@ class CobrosSupabaseService {
         turno: this.mapTurnoType(turno.turno_tipo), // Convertir de turno_tipo a formato legacy
         estado: turno.estado,  // Siempre será 'completado' debido al filtro
         trabajadorId: turno.trabajador_id,
+        cobro: turno.cobro || 0,  // ✅ INCLUIR COBRO GUARDADO EN SUPABASE
         // Campos adicionales que puede necesitar Cobros
         turno_tipo: turno.turno_tipo,
         created_at: turno.created_at
@@ -89,12 +90,13 @@ class CobrosSupabaseService {
   }
 
   /**
-   * 📊 Calcular cobros basados en turnos COMPLETADOS de Supabase
+   * 📊 Calcular cobros usando campo 'cobro' guardado en Supabase
    * Compatible con la interfaz existente de Cobros.jsx
    */
   async calculateTurnosCobros(tarifaPorTurno = 50000) {
     try {
-      console.log(`💰 Calculando cobros con tarifa: $${tarifaPorTurno.toLocaleString('es-CL')} por turno`)
+      console.log('💰 Calculando cobros usando campo "cobro" guardado en BD')
+      console.log('⚠️ Parámetro tarifaPorTurno IGNORADO - usa valores históricos')
       
       // 1. Cargar turnos completados desde Supabase
       const turnos = await this.loadTurnosFromSupabase()
@@ -104,13 +106,13 @@ class CobrosSupabaseService {
         return []
       }
 
-      // 2. Procesar cálculos de cobros
+      // 2. Procesar cálculos de cobros usando campo 'cobro' guardado
       const cobrosCalculations = new Map()
 
       turnos.forEach(turno => {
         const conductorNombre = turno.conductorNombre
         const fecha = turno.fecha
-        const cobro = tarifaPorTurno // Tarifa fija por turno
+        const cobro = turno.cobro || 0  // ✅ USAR COBRO GUARDADO EN SUPABASE
 
         // Inicializar trabajador si no existe
         if (!cobrosCalculations.has(conductorNombre)) {
@@ -119,19 +121,19 @@ class CobrosSupabaseService {
             totalTurnos: 0,
             totalCobro: 0,
             turnos: [],
-            tarifaPorTurno
+            tarifaPorTurno: 'Histórico' // Indicar que usa valores históricos
           })
         }
 
         const calculation = cobrosCalculations.get(conductorNombre)
         calculation.totalTurnos++
-        calculation.totalCobro += cobro
+        calculation.totalCobro += cobro  // ✅ SUMAR COBRO GUARDADO
 
-        // Agregar turno individual
+        // Agregar turno individual con cobro guardado
         calculation.turnos.push({
           fecha,
           turno: turno.turno,
-          cobro,
+          cobro,  // ✅ COBRO GUARDADO EN SUPABASE
           turno_tipo: turno.turno_tipo
         })
       })
@@ -139,7 +141,7 @@ class CobrosSupabaseService {
       const result = Array.from(cobrosCalculations.values())
       console.log(`✅ Cálculo de cobros completado: ${result.length} trabajadores procesados`)
       console.log(`📊 Total turnos COMPLETADOS procesados: ${turnos.length}`)
-      console.log('💰 Solo turnos con estado "completado" generan cobros')
+      console.log('💰 USANDO CAMPO "COBRO" GUARDADO - NO recalcula con tarifas actuales')
       
       return result
 
