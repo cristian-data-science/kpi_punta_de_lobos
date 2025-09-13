@@ -12,18 +12,27 @@ TransApp is a React-based transportation management system for fleet and worker 
 ## Architecture & Data Flow
 
 ### Enhanced Services Architecture (Dual-Layer System)
+- **Supabase Singleton** (`src/services/supabaseClient.js`): Central Supabase client instance to prevent multiple GoTrueClient warnings
 - **Supabase Integration** (`src/services/supabaseService.js`): Primary database layer with PostgreSQL backend
 - **SupabaseIntegrationService** (`src/services/supabaseIntegrationService.js`): Bridge between Supabase and existing system
 - **MasterDataService** (`src/services/masterDataService.js`): Central data management with localStorage fallback
 - **PersistentStorage** (`src/services/persistentStorage.js`): Abstracted localStorage operations with `transapp_` prefix
 - **ConfigService** (`src/services/configService.js`): Centralized configuration management with snapshot sync
-- **Data Flow**: UI Components → MasterDataService ↔ SupabaseIntegration ↔ Supabase PostgreSQL (localStorage fallback)
+- **Data Flow**: UI Components → MasterDataService ↔ SupabaseIntegration ↔ Supabase Singleton ↔ Supabase PostgreSQL
 
 ### Database Architecture
 - **Primary**: Supabase PostgreSQL with real-time capabilities
 - **Tables**: `trabajadores` (14 workers with "fijo" contracts), `turnos` (98+ shift records)
 - **Features**: UUID PKs, RLS policies, indexed searches, foreign key relationships
 - **Backup**: localStorage with `transapp_` prefix for offline functionality
+
+### Supabase Singleton Pattern (IMPLEMENTED)
+**Architecture**: `src/services/supabaseClient.js` provides centralized Supabase client management
+- **Problem Solved**: Eliminates "Multiple GoTrueClient instances" warnings in browser console
+- **Implementation**: Single `getSupabaseClient()` function returns cached instance
+- **Usage**: All components/services now use `import { getSupabaseClient } from '../services/supabaseClient.js'`
+- **Components Updated**: 10+ files including AddShiftModal, Calendar, Workers, and all service files
+- **Benefits**: Better performance, consistent behavior, clean console logs, no concurrent client conflicts
 
 ### Authentication System
 - Fixed credentials: `admin` / `transapp123` (see `AuthContext.jsx`)
@@ -238,6 +247,14 @@ turnos table:
 - **Applied in**: `formatDate()` functions in Cobros.jsx, Payments.jsx, and masterDataService.js
 - **Issue Fixed**: Date strings like "2025-06-02" now correctly display as "lun, 2 jun" instead of previous day
 
+### Supabase Singleton Pattern (CRITICAL)
+- **Implementation**: `src/services/supabaseClient.js` provides centralized client management
+- **Usage Pattern**: Always use `import { getSupabaseClient } from '../services/supabaseClient.js'`
+- **Never Use**: `import { createClient } from '@supabase/supabase-js'` directly in components
+- **Benefits**: Eliminates "Multiple GoTrueClient instances" warnings, better performance, consistent behavior
+- **Applied To**: All components, services, and pages (10+ files updated)
+- **Critical Rule**: ONE client instance per application, managed centrally
+
 ### Professional Excel Export System
 - **ExcelJS Integration**: Advanced styling with enterprise-grade formatting
 - **Features**:
@@ -264,6 +281,19 @@ turnos table:
 - AuthContext for authentication state
 - MasterDataService singleton for business data
 - No Redux/Zustand - keep it simple with React patterns
+
+### React Keys Best Practices (IMPLEMENTED)
+- **Problem Solved**: "Encountered two children with the same key" warnings in AddShiftModal
+- **Solution**: Composite keys for unique identification: `${selectedDate}-${turno.id}-${index}`
+- **Pattern**: Always include context (date, parent ID, index) for uniqueness
+- **Applied To**: AddShiftModal.jsx (3 key locations fixed)
+- **Benefits**: Prevents React rendering conflicts, better performance, stable component identity
+
+### Component Interaction Patterns (IMPLEMENTED)
+- **Smart Disabling Logic**: Components can be disabled for new selection but enabled for deselection
+- **Contextual Cursors**: `cursor-not-allowed` only when truly blocked, not for editable items
+- **Flexible State Management**: Allow deselection even when components appear "disabled"
+- **Applied To**: AddShiftModal worker selection system
 
 ### Styling Conventions
 - **Tailwind CSS 4.1.7** with Vite plugin (`@tailwindcss/vite`)
@@ -526,8 +556,16 @@ Each major directory now contains a README.md explaining:
 - **Worker Selection**: Dropdown with formatted names and availability checking
 - **Shift Types**: primer_turno, segundo_turno, tercer_turno with rate calculations
 - **State Management**: Real-time UI updates with optimistic rendering
-- **Direct Supabase Integration**: Uses createClient for reliable database operations
+- **Supabase Singleton Integration**: Uses getSupabaseClient() for reliable database operations
 - **Validation System**: Date restrictions, worker availability, required fields
+- **Unique React Keys**: Composite keys prevent duplicate key errors (`${selectedDate}-${turno.id}-${index}`)
+- **Smart Worker Blocking**: Allows deselection of assigned workers while preventing double-assignment
+
+### Modal Editing Enhancements (IMPLEMENTED)
+- **Flexible Worker Management**: Workers can be deselected from any turn, eliminating "blocked worker" issues
+- **Intelligent Cursor States**: Cursor shows "not-allowed" only for true restrictions, not for deselectable workers
+- **Contextual Disabling**: Checkboxes disabled only for non-selected workers in conflicts
+- **React Key Optimization**: Eliminates "Encountered two children with the same key" warnings
 
 ### Advanced Functionality
 - **Weekly Copy System**: Copy entire weeks from lunes to domingo
