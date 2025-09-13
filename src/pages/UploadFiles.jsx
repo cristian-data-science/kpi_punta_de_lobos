@@ -1,11 +1,15 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Upload, FileText, CheckCircle, Database, Trash2, AlertCircle, Users, Route, Clock, Calendar, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Upload, FileText, CheckCircle, Database, Trash2, AlertCircle, Users, Route, Clock, Calendar, TrendingUp, AlertTriangle, CloudUpload, Server, Lightbulb } from 'lucide-react'
 import { useState, useRef } from 'react'
 import masterDataService from '@/services/masterDataService'
 import excelValidationService from '@/services/excelValidationService'
 import inconsistenciesService from '@/services/inconsistenciesService'
+import { getSupabaseClient } from '../services/supabaseClient.js'
 import * as XLSX from 'xlsx'
+
+// Conexión singleton a Supabase (fuera del componente para evitar múltiples instancias)
+const supabase = getSupabaseClient()
 
 const UploadFiles = () => {
   const [isLoadingDemo, setIsLoadingDemo] = useState(false)
@@ -15,6 +19,12 @@ const UploadFiles = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [processedResults, setProcessedResults] = useState([])
   const [validationMode, setValidationMode] = useState('default') // Nueva configuración
+  const [saveToSupabase, setSaveToSupabase] = useState(true) // Nueva opción para guardar en Supabase
+  const [isUploadingToSupabase, setIsUploadingToSupabase] = useState(false)
+  const [officialWorkers, setOfficialWorkers] = useState([]) // Trabajadores oficiales de Supabase
+  const [workerMapping, setWorkerMapping] = useState(new Map()) // Mapeo manual nombre_archivo -> trabajador_oficial
+  const [showMappingInterface, setShowMappingInterface] = useState(false)
+  const [uniqueFileWorkers, setUniqueFileWorkers] = useState([]) // Nombres únicos del archivo
   const fileInputRef = useRef(null)
 
   // Función auxiliar para convertir fechas de Excel a JavaScript
@@ -22,6 +32,550 @@ const UploadFiles = () => {
     const epoch = new Date(1900, 0, 1);
     return new Date(epoch.getTime() + (excelDate - 2) * 24 * 60 * 60 * 1000);
   };
+
+  // Función para cargar trabajadores oficiales de Supabase
+  const loadOfficialWorkers = async () => {
+    try {
+      console.log('👥 Cargando trabajadores oficiales de Supabase...')
+      const { data, error } = await supabase
+        .from('trabajadores')
+        .select('*')
+        .eq('estado', 'activo')
+        .order('nombre')
+      
+      if (error) throw error
+      
+      console.log('✅ Trabajadores oficiales cargados:', data?.length || 0)
+      setOfficialWorkers(data || [])
+      
+      // Auto-aplicar sugerencias después de cargar trabajadores
+      if (data && data.length > 0 && uniqueFileWorkers.length > 0) {
+        console.log('🎯 Auto-aplicando sugerencias iniciales...')
+        setTimeout(() => {
+          applySuggestionsAfterLoad(data)
+        }, 200)
+      }
+      
+      return data || []
+    } catch (error) {
+      console.error('❌ Error cargando trabajadores oficiales:', error)
+      setOfficialWorkers([])
+      return []
+    }
+  }
+
+  // Función para aplicar sugerencias después de cargar trabajadores
+  const applySuggestionsAfterLoad = (workers) => {
+    try {
+      const suggestions = new Map()
+      
+      uniqueFileWorkers.forEach(fileWorker => {
+        let bestMatch = null
+        let bestScore = 0
+        
+        workers.forEach(officialWorker => {
+          const similarity = calculateNameSimilarity(fileWorker, officialWorker.nombre)
+          if (similarity > bestScore && similarity >= 0.4) {
+            bestScore = similarity
+            bestMatch = {
+              id: officialWorker.id,
+              name: officialWorker.nombre,
+              rut: officialWorker.rut,
+              score: similarity
+            }
+          }
+        })
+        
+        if (bestMatch) {
+          suggestions.set(fileWorker, bestMatch)
+          console.log(`💡 Auto-sugerencia para "${fileWorker}": ${bestMatch.name} (${Math.round(bestMatch.score * 100)}% confianza)`)
+        }
+      })
+      
+      // Aplicar las sugerencias automáticamente
+      const newMapping = new Map()
+      suggestions.forEach((suggestion, fileWorker) => {
+        newMapping.set(fileWorker, suggestion.id)
+      })
+      
+      setWorkerMapping(newMapping)
+      console.log(`🚀 Auto-aplicadas ${suggestions.size} sugerencias iniciales`)
+      
+    } catch (error) {
+      console.error('❌ Error auto-aplicando sugerencias:', error)
+    }
+  }
+
+  // Función para extraer nombres únicos de trabajadores desde los turnos procesados
+  const extractUniqueWorkersFromShifts = (allShifts) => {
+    const uniqueNames = new Set()
+    
+    allShifts.forEach(shift => {
+      const workerName = shift.conductorNombre
+      if (workerName && workerName.trim() !== '') {
+        uniqueNames.add(workerName.trim())
+      }
+    })
+    
+    const uniqueArray = Array.from(uniqueNames).sort()
+    console.log('👥 Nombres únicos en archivos:', uniqueArray.length)
+    console.log('📝 Nombres encontrados:', uniqueArray)
+    return uniqueArray
+  }
+
+  // Función para transformar turnos al formato de Supabase usando mapeo manual
+  const transformShiftsForSupabase = (results) => {
+    const supabaseShifts = []
+    let unmappedCount = 0
+    const omittedWorkers = new Set()
+    
+    results.forEach(result => {
+      if (result.turnos && result.turnos.length > 0) {
+        result.turnos.forEach(turno => {
+          if (turno.conductoresAsignados && Array.isArray(turno.conductoresAsignados)) {
+            turno.conductoresAsignados.forEach(conductor => {
+              const conductorName = conductor.trim()
+              const mappedWorkerId = workerMapping.get(conductorName)
+              
+              if (mappedWorkerId) {
+                // Mapear tipo de turno al formato de Supabase
+                let turno_tipo = 'primer_turno'
+                const tipoTurno = turno.turno || ''
+                if (tipoTurno.includes('SEGUNDO')) {
+                  turno_tipo = 'segundo_turno'
+                } else if (tipoTurno.includes('TERCER')) {
+                  turno_tipo = 'tercer_turno'
+                }
+                
+                supabaseShifts.push({
+                  trabajador_id: mappedWorkerId,
+                  fecha: turno.fecha,
+                  turno_tipo: turno_tipo,
+                  estado: 'programado'
+                })
+              } else {
+                unmappedCount++
+                omittedWorkers.add(conductorName)
+                console.warn('⚠️ Turno sin mapear:', conductorName, turno.fecha, turno.turno)
+              }
+            })
+          }
+        })
+      }
+    })
+    
+    console.log('📅 Turnos transformados para Supabase:', supabaseShifts.length)
+    if (unmappedCount > 0) {
+      console.warn('⚠️ Turnos sin mapear:', unmappedCount, 'de trabajadores:', Array.from(omittedWorkers))
+    }
+    return { 
+      shifts: supabaseShifts, 
+      unmapped: unmappedCount,
+      omittedWorkers: Array.from(omittedWorkers)
+    }
+  }
+
+  // Función para verificar si el mapeo está completo
+  const isMappingComplete = () => {
+    return uniqueFileWorkers.every(workerName => workerMapping.has(workerName))
+  }
+
+  // Función para obtener estadísticas del mapeo
+  const getMappingStats = () => {
+    const totalWorkers = uniqueFileWorkers.length
+    const mappedWorkers = uniqueFileWorkers.filter(worker => workerMapping.has(worker))
+    const unmappedWorkers = uniqueFileWorkers.filter(worker => !workerMapping.has(worker))
+    
+    return {
+      total: totalWorkers,
+      mapped: mappedWorkers.length,
+      unmapped: unmappedWorkers.length,
+      mappedNames: mappedWorkers,
+      unmappedNames: unmappedWorkers,
+      canProceed: mappedWorkers.length > 0 // Puede proceder si hay al menos 1 mapeado
+    }
+  }
+
+  // Función para calcular cuántos turnos se cargarán vs se omitirán
+  const getShiftStats = () => {
+    let turnosACargar = 0
+    let turnosAOmitir = 0
+    
+    processedResults.forEach(result => {
+      if (result.turnos && result.turnos.length > 0) {
+        result.turnos.forEach(turno => {
+          if (turno.conductoresAsignados && Array.isArray(turno.conductoresAsignados)) {
+            turno.conductoresAsignados.forEach(conductor => {
+              const conductorName = conductor.trim()
+              if (workerMapping.has(conductorName)) {
+                turnosACargar++
+              } else {
+                turnosAOmitir++
+              }
+            })
+          }
+        })
+      }
+    })
+    
+    return { turnosACargar, turnosAOmitir }
+  }
+
+  // Función para manejar la asignación de trabajadores
+  const handleWorkerMapping = (fileWorkerName, officialWorkerId) => {
+    const updatedMapping = new Map(workerMapping)
+    if (officialWorkerId) {
+      const worker = officialWorkers.find(w => w.id === officialWorkerId)
+      console.log(`✅ Mapeando "${fileWorkerName}" -> "${worker?.nombre || 'Desconocido'}" (ID: ${officialWorkerId})`)
+      updatedMapping.set(fileWorkerName, officialWorkerId)
+    } else {
+      console.log(`❌ Desmapeando "${fileWorkerName}"`)
+      updatedMapping.delete(fileWorkerName)
+    }
+    setWorkerMapping(updatedMapping)
+    
+    // Log estado actual del mapeo
+    console.log('📊 Mapeo actual:', {
+      total: updatedMapping.size,
+      completado: `${updatedMapping.size}/${uniqueFileWorkers.length}`,
+      estado: Object.fromEntries(updatedMapping)
+    })
+  }
+
+  // Función para normalizar nombres para comparación
+  const normalizeName = (name) => {
+    if (!name) return ''
+    return name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remover acentos
+      .replace(/[^a-z0-9\s]/g, '') // Remover caracteres especiales
+      .trim()
+  }
+
+  // Función para calcular similitud entre nombres
+  const calculateNameSimilarity = (name1, name2) => {
+    if (!name1 || !name2) return 0
+    
+    const normalized1 = normalizeName(name1)
+    const normalized2 = normalizeName(name2)
+    
+    // Verificar coincidencia exacta
+    if (normalized1 === normalized2) return 1.0
+    
+    // Verificar si uno contiene al otro completamente
+    if (normalized1.includes(normalized2) || normalized2.includes(normalized1)) return 0.9
+    
+    // Separar palabras y filtrar palabras muy cortas (< 3 caracteres)
+    const words1 = normalized1.split(/\s+/).filter(w => w.length >= 2)
+    const words2 = normalized2.split(/\s+/).filter(w => w.length >= 2)
+    
+    // Algoritmo mejorado de coincidencia de palabras
+    let matchingWords = 0
+    let exactMatches = 0
+    let partialMatches = 0
+    
+    words1.forEach(word1 => {
+      let bestMatchForWord = 0
+      
+      words2.forEach(word2 => {
+        if (word1 === word2) {
+          // Coincidencia exacta
+          exactMatches++
+          bestMatchForWord = Math.max(bestMatchForWord, 1.0)
+        } else if (word1.length >= 4 && word2.length >= 4) {
+          // Para palabras largas, verificar similitud parcial mejorada
+          if (word1.includes(word2) || word2.includes(word1)) {
+            partialMatches += 0.8
+            bestMatchForWord = Math.max(bestMatchForWord, 0.8)
+          } else {
+            // Similitud por caracteres comunes en palabras largas
+            const commonChars = [...word1].filter(char => word2.includes(char)).length
+            const similarity = commonChars / Math.max(word1.length, word2.length)
+            if (similarity >= 0.6) { // 60% de similitud mínima
+              partialMatches += similarity * 0.6
+              bestMatchForWord = Math.max(bestMatchForWord, similarity * 0.6)
+            }
+          }
+        } else if (word1.length >= 3 && word2.length >= 3) {
+          // Para palabras medianas, verificar inclusión o similitud alta
+          if (word1.includes(word2) || word2.includes(word1)) {
+            partialMatches += 0.7
+            bestMatchForWord = Math.max(bestMatchForWord, 0.7)
+          }
+        }
+      })
+      
+      if (bestMatchForWord > 0) {
+        matchingWords += bestMatchForWord
+      }
+    })
+    
+    // Calcular score de palabras mejorado
+    const minWords = Math.min(words1.length, words2.length)
+    const maxWords = Math.max(words1.length, words2.length)
+    
+    let wordSimilarity = 0
+    if (maxWords > 0) {
+      // Dar más peso a coincidencias exactas
+      const weightedScore = (exactMatches * 1.0) + partialMatches
+      wordSimilarity = weightedScore / maxWords
+      
+      // Bonificación si hay coincidencias en nombres cortos
+      if (minWords <= 2 && exactMatches >= 1) {
+        wordSimilarity = Math.min(wordSimilarity + 0.2, 1.0)
+      }
+    }
+    
+    // Calcular similitud por caracteres comunes (mejorada)
+    const commonChars = [...normalized1].filter(char => normalized2.includes(char)).length
+    const maxLength = Math.max(normalized1.length, normalized2.length)
+    const charSimilarity = maxLength > 0 ? commonChars / maxLength : 0
+    
+    // Verificar patrones específicos (primer nombre + apellido)
+    const firstWord1 = words1[0] || ''
+    const lastWord1 = words1[words1.length - 1] || ''
+    const firstWord2 = words2[0] || ''
+    const lastWord2 = words2[words2.length - 1] || ''
+    
+    let namePatternBonus = 0
+    if (firstWord1 && firstWord2 && firstWord1 === firstWord2) {
+      namePatternBonus += 0.3 // Bonus por primer nombre igual
+      
+      // Bonus adicional si también coincide algún apellido
+      words1.slice(1).forEach(surname1 => {
+        words2.slice(1).forEach(surname2 => {
+          if (surname1 === surname2 || 
+              (surname1.length >= 4 && surname2.length >= 4 && 
+               (surname1.includes(surname2) || surname2.includes(surname1)))) {
+            namePatternBonus += 0.2
+          }
+        })
+      })
+    }
+    
+    // Score final con ponderación mejorada
+    let finalScore = (wordSimilarity * 0.8) + (charSimilarity * 0.2) + Math.min(namePatternBonus, 0.4)
+    
+    // Asegurar que no exceda 1.0
+    finalScore = Math.min(finalScore, 1.0)
+    
+    return Math.round(finalScore * 100) / 100 // Redondear a 2 decimales
+  }
+
+  // Función para generar sugerencias de mapeo automático
+  const generateMappingSuggestions = () => {
+    console.log('🔍 Generando sugerencias mejoradas...', {
+      uniqueFileWorkers: uniqueFileWorkers,
+      officialWorkers: officialWorkers.length,
+      officialWorkersNames: officialWorkers.map(w => w.nombre)
+    })
+    
+    const suggestions = new Map()
+    
+    // Buscar trabajador "EVENTUAL SIN RUT" en la base de datos
+    const eventualWorker = officialWorkers.find(w => 
+      w.nombre && w.nombre.toUpperCase().includes('EVENTUAL') && w.nombre.toUpperCase().includes('SIN RUT')
+    )
+    
+    console.log('🔍 Trabajador EVENTUAL encontrado:', eventualWorker ? eventualWorker.nombre : 'NO ENCONTRADO')
+    
+    uniqueFileWorkers.forEach(fileWorker => {
+      console.log(`🔍 Analizando trabajador del archivo: "${fileWorker}"`)
+      let bestMatch = null
+      let bestScore = 0
+      
+      // Buscar coincidencias con trabajadores oficiales (excluyendo EVENTUAL)
+      officialWorkers.forEach(officialWorker => {
+        // Excluir EVENTUAL SIN RUT de las comparaciones normales
+        if (officialWorker.nombre && officialWorker.nombre.toUpperCase().includes('EVENTUAL')) {
+          return
+        }
+        
+        const similarity = calculateNameSimilarity(fileWorker, officialWorker.nombre)
+        console.log(`  📊 "${fileWorker}" vs "${officialWorker.nombre}": ${Math.round(similarity * 100)}%`)
+        
+        if (similarity > bestScore && similarity >= 0.3) { // Umbral reducido a 30% para mejor detección
+          bestScore = similarity
+          bestMatch = {
+            id: officialWorker.id,
+            name: officialWorker.nombre,
+            rut: officialWorker.rut,
+            score: similarity
+          }
+        }
+      })
+      
+      if (bestMatch) {
+        suggestions.set(fileWorker, bestMatch)
+        console.log(`💡 ✅ Sugerencia para "${fileWorker}": ${bestMatch.name} (${Math.round(bestMatch.score * 100)}% confianza)`)
+      } else {
+        // Si no hay coincidencias y existe EVENTUAL SIN RUT, sugerirlo
+        if (eventualWorker) {
+          suggestions.set(fileWorker, {
+            id: eventualWorker.id,
+            name: eventualWorker.nombre,
+            rut: eventualWorker.rut,
+            score: 0, // 0% de similitud, pero es opción de respaldo
+            isEventual: true // Marcar como sugerencia eventual
+          })
+          console.log(`💡 🔄 Sugerencia EVENTUAL para "${fileWorker}": ${eventualWorker.nombre} (respaldo por 0% coincidencia)`)
+        } else {
+          console.log(`💡 ❌ Sin sugerencia para "${fileWorker}" (mejor score: ${Math.round(bestScore * 100)}%)`)
+        }
+      }
+    })
+    
+    console.log(`🎯 Total sugerencias generadas: ${suggestions.size}`)
+    return suggestions
+  }
+
+  // Función para aplicar sugerencias automáticas
+  const applySuggestions = () => {
+    console.log('🔄 Aplicando sugerencias automáticas...')
+    console.log('📋 Estados actuales:', {
+      uniqueFileWorkers: uniqueFileWorkers,
+      officialWorkersCount: officialWorkers.length,
+      currentMapping: Object.fromEntries(workerMapping)
+    })
+    
+    if (uniqueFileWorkers.length === 0) {
+      console.warn('⚠️ No hay trabajadores únicos del archivo para mapear')
+      return
+    }
+    
+    if (officialWorkers.length === 0) {
+      console.warn('⚠️ No hay trabajadores oficiales cargados')
+      return
+    }
+    
+    const suggestions = generateMappingSuggestions()
+    const newMapping = new Map(workerMapping)
+    
+    suggestions.forEach((suggestion, fileWorker) => {
+      console.log(`🎯 Mapeando: "${fileWorker}" -> "${suggestion.name}" (ID: ${suggestion.id})`)
+      newMapping.set(fileWorker, suggestion.id)
+    })
+    
+    setWorkerMapping(newMapping)
+    console.log(`✨ Aplicadas ${suggestions.size} sugerencias automáticas`)
+    
+    // Forzar re-render para mostrar cambios inmediatamente
+    setTimeout(() => {
+      console.log('📊 Estado del mapeo actualizado:', Object.fromEntries(newMapping))
+    }, 100)
+  }
+
+  // Función para extraer nombres únicos de trabajadores del archivo
+  const extractUniqueFileWorkers = (results) => {
+    const allWorkers = []
+    
+    results.forEach(result => {
+      if (result.turnos && result.turnos.length > 0) {
+        result.turnos.forEach(turno => {
+          if (turno.conductoresAsignados && Array.isArray(turno.conductoresAsignados)) {
+            turno.conductoresAsignados.forEach(conductor => {
+              if (conductor && conductor.trim()) {
+                allWorkers.push(conductor.trim())
+              }
+            })
+          }
+        })
+      }
+    })
+    
+    const uniqueNames = [...new Set(allWorkers)]
+    console.log('👥 Trabajadores únicos en archivos:', uniqueNames)
+    return uniqueNames
+  }
+
+  // Función principal para subir datos a Supabase (SIN crear trabajadores automáticamente)
+  const uploadToSupabase = async (allShifts) => {
+    setIsUploadingToSupabase(true)
+    console.log('� Iniciando carga a Supabase con mapeo manual...')
+    
+    try {
+      const mappingStats = getMappingStats()
+      const shiftStats = getShiftStats()
+      
+      // Verificar que haya al menos 1 trabajador mapeado
+      if (!mappingStats.canProceed) {
+        throw new Error('No hay trabajadores mapeados. Debe mapear al menos un trabajador para proceder.')
+      }
+
+      console.log('📊 Estadísticas de carga:', {
+        trabajadoresMapeados: mappingStats.mapped,
+        trabajadoresOmitidos: mappingStats.unmapped,
+        turnosACargar: shiftStats.turnosACargar,
+        turnosAOmitir: shiftStats.turnosAOmitir
+      })
+
+      // Transformar turnos para Supabase usando el mapeo manual  
+      const validResults = processedResults.filter(result => result.turnos && result.turnos.length > 0)
+      const { shifts: supabaseShifts, unmapped, omittedWorkers } = transformShiftsForSupabase(validResults)
+      
+      if (supabaseShifts.length > 0) {
+        console.log('📅 Insertando turnos en Supabase:', supabaseShifts.length)
+        if (unmapped > 0) {
+          console.warn(`⚠️ Se omitirán ${unmapped} turnos de trabajadores no mapeados:`, omittedWorkers)
+        }
+        
+        // Obtener fechas únicas para limpiar turnos existentes
+        const uniqueDates = [...new Set(supabaseShifts.map(shift => shift.fecha))]
+        console.log('📅 Fechas únicas de turnos:', uniqueDates.length)
+        
+        // Limpiar turnos existentes para las fechas importadas
+        if (uniqueDates.length > 0) {
+          console.log('🗑️ Limpiando turnos existentes para las fechas importadas...')
+          const { error: deleteError } = await supabase
+            .from('turnos')
+            .delete()
+            .in('fecha', uniqueDates)
+          
+          if (deleteError) {
+            console.warn('⚠️ Warning al limpiar turnos existentes:', deleteError)
+          } else {
+            console.log('✅ Turnos existentes limpiados para fechas importadas')
+          }
+        }
+        
+        // Insertar nuevos turnos
+        const { data: createdShifts, error: shiftsError } = await supabase
+          .from('turnos')
+          .insert(supabaseShifts)
+          .select()
+        
+        if (shiftsError) throw shiftsError
+        
+        console.log('✅ Turnos insertados exitosamente:', createdShifts.length)
+        
+        return {
+          workersUsed: mappingStats.mapped,
+          workersOmitted: mappingStats.unmapped,
+          shiftsInserted: supabaseShifts.length,
+          shiftsOmitted: unmapped,
+          datesProcessed: uniqueDates.length,
+          omittedWorkerNames: mappingStats.unmappedNames
+        }
+      } else {
+        console.warn('⚠️ No se generaron turnos para insertar')
+        return {
+          workersUsed: 0,
+          workersOmitted: mappingStats.unmapped,
+          shiftsInserted: 0,
+          shiftsOmitted: unmapped,
+          datesProcessed: 0,
+          omittedWorkerNames: mappingStats.unmappedNames
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Error subiendo a Supabase:', error)
+      throw error
+    } finally {
+      setIsUploadingToSupabase(false)
+    }
+  }
 
   // Función para procesar archivos Excel de planillas de turnos - NUEVA VERSIÓN CON VALIDACIÓN ROBUSTA
   const processExcelFile = (file) => {
@@ -385,6 +939,27 @@ const UploadFiles = () => {
       }
 
       setProcessedResults(results)
+      
+      // Si hay archivos válidos Y se debe guardar en Supabase, preparar el mapeo
+      if (saveToSupabase && results.some(result => result.turnos && result.turnos.length > 0)) {
+        // Extraer trabajadores únicos de todos los archivos exitosos
+        const validResults = results.filter(result => result.turnos && result.turnos.length > 0)
+        
+        const uniqueWorkers = extractUniqueFileWorkers(validResults)
+        setUniqueFileWorkers(uniqueWorkers)
+        
+        // Limpiar mapeo previo
+        setWorkerMapping(new Map())
+        
+        // Cargar trabajadores oficiales de Supabase para el mapeo
+        await loadOfficialWorkers()
+        
+        // Si hay trabajadores únicos, mostrar interfaz de mapeo
+        if (uniqueWorkers.length > 0) {
+          setShowMappingInterface(true)
+        }
+      }
+
       setShowConfirmModal(true)
 
     } catch (error) {
@@ -448,6 +1023,7 @@ const UploadFiles = () => {
     try {
       console.log('📋 Iniciando confirmación de importación...')
       console.log('📊 Resultados procesados:', processedResults)
+      console.log('🗄️ Guardar en Supabase:', saveToSupabase)
       
       const validResults = processedResults.filter(result => result.errors.length === 0)
       
@@ -520,12 +1096,30 @@ const UploadFiles = () => {
       console.log('💾 Total de turnos a guardar:', allShifts.length)
       console.log('📝 Muestra de turnos:', allShifts.slice(0, 3))
 
-      // Guardar en masterDataService
+      // Guardar en masterDataService (localStorage)
       if (allShifts.length > 0) {
         masterDataService.addWorkerShifts(allShifts)
-        console.log('✅ Turnos guardados exitosamente en masterDataService')
+        console.log('✅ Turnos guardados exitosamente en masterDataService (localStorage)')
       } else {
         console.warn('⚠️ No se encontraron turnos para guardar')
+      }
+
+      // Opcionalmente subir a Supabase
+      let supabaseResults = null
+      if (saveToSupabase && allShifts.length > 0) {
+        console.log('🗄️ Iniciando carga a Supabase...')
+        try {
+          supabaseResults = await uploadToSupabase(allShifts)
+          console.log('✅ Datos subidos exitosamente a Supabase:', supabaseResults)
+        } catch (supabaseError) {
+          console.error('❌ Error subiendo a Supabase:', supabaseError)
+          setUploadStatus({ 
+            type: 'error', 
+            message: `Datos guardados localmente, pero error al subir a Supabase: ${supabaseError.message}` 
+          })
+          setShowConfirmModal(false)
+          return
+        }
       }
 
       // Generar reportes de inconsistencias para cada archivo procesado
@@ -556,7 +1150,13 @@ const UploadFiles = () => {
         `✅ Importación completada exitosamente:`,
         `📂 ${validResults.length} archivo(s) procesado(s)`,
         `👥 ${allShifts.length} turno(s) importado(s)`,
-        totalCorrectionsMade > 0 ? `🔧 ${totalCorrectionsMade} corrección(es) automática(s) aplicada(s)` : null
+        totalCorrectionsMade > 0 ? `🔧 ${totalCorrectionsMade} corrección(es) automática(s) aplicada(s)` : null,
+        supabaseResults ? [
+          `🗄️ Supabase: ${supabaseResults.shiftsInserted} turnos insertados`,
+          supabaseResults.workersUsed ? `${supabaseResults.workersUsed} trabajadores utilizados` : null,
+          supabaseResults.shiftsOmitted > 0 ? `${supabaseResults.shiftsOmitted} turnos omitidos` : null,
+          supabaseResults.workersOmitted > 0 ? `${supabaseResults.workersOmitted} trabajadores sin mapear` : null
+        ].filter(Boolean).join(', ') : null
       ].filter(Boolean).join(' | ')
 
       setUploadStatus({ 
@@ -586,6 +1186,11 @@ const UploadFiles = () => {
     setProcessedResults([])
     setUploadStatus(null)
     setIsProcessing(false)
+    // Limpiar estados del mapeo
+    setUniqueFileWorkers([])
+    setWorkerMapping(new Map())
+    setShowMappingInterface(false)
+    setOfficialWorkers([])
     // Limpiar el input de archivo para permitir recargar el mismo archivo
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -688,6 +1293,30 @@ const UploadFiles = () => {
                 {validationMode === 'permissive' && '🔧 Ideal para archivos con errores menores frecuentes'}
                 {validationMode === 'strict' && '⚠️ Solo archivos perfectamente formateados'}
                 {validationMode === 'legacy' && '📄 Para archivos con formatos antiguos o variantes'}
+              </p>
+            </div>
+
+            {/* Opción de guardado en Supabase */}
+            <div className="space-y-2">
+              <div className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  id="saveToSupabase"
+                  checked={saveToSupabase}
+                  onChange={(e) => setSaveToSupabase(e.target.checked)}
+                  disabled={isProcessing}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="saveToSupabase" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <Server className="h-4 w-4 text-blue-600" />
+                  Guardar directamente en Supabase
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 ml-7">
+                {saveToSupabase ? 
+                  '🗄️ Los datos se guardarán en localStorage y también en la base de datos Supabase PostgreSQL' :
+                  '📁 Los datos solo se guardarán en localStorage (almacenamiento local del navegador)'
+                }
               </p>
             </div>
             
@@ -808,6 +1437,218 @@ const UploadFiles = () => {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Interfaz de Mapeo de Trabajadores */}
+              {showMappingInterface && saveToSupabase && uniqueFileWorkers.length > 0 && (
+                <div className="mb-6 p-4 border-2 border-blue-200 bg-blue-50 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold flex items-center text-blue-800">
+                      <Users className="h-5 w-5 mr-2" />
+                      👤 Mapeo de Trabajadores (Requerido para Supabase)
+                    </h3>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={applySuggestions}
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-2 bg-white hover:bg-blue-100 border-blue-300"
+                      >
+                        <Lightbulb className="h-4 w-4" />
+                        Aplicar Sugerencias
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          console.log('🧪 Botón de prueba presionado')
+                          console.log('📊 Estados de diagnóstico:', {
+                            uniqueFileWorkers,
+                            officialWorkers: officialWorkers.length,
+                            workerMapping: Object.fromEntries(workerMapping)
+                          })
+                          loadOfficialWorkers()
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-2 bg-yellow-50 hover:bg-yellow-100 border-yellow-300"
+                      >
+                        🧪 Debug
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-blue-700 mb-4">
+                    Los siguientes nombres aparecen en los archivos. Selecciona el trabajador oficial correspondiente o usa sugerencias automáticas:
+                  </p>
+                  
+                  <div className="space-y-3">
+                    {uniqueFileWorkers.map((fileWorkerName) => {
+                      const suggestions = generateMappingSuggestions()
+                      const suggestion = suggestions.get(fileWorkerName)
+                      
+                      return (
+                        <div key={fileWorkerName} className="p-3 bg-white rounded-md border">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex-1">
+                              <span className="font-medium text-gray-800">📄 {fileWorkerName}</span>
+                            </div>
+                            <div className="ml-3">
+                              {workerMapping.has(fileWorkerName) ? (
+                                <CheckCircle className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <AlertCircle className="h-5 w-5 text-orange-500" />
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Sugerencia automática */}
+                          {suggestion && !workerMapping.has(fileWorkerName) && (
+                            <div className={`mb-2 p-2 rounded text-sm border ${
+                              suggestion.isEventual 
+                                ? 'bg-orange-50 border-orange-200' 
+                                : 'bg-yellow-50 border-yellow-200'
+                            }`}>
+                              <div className="flex items-center gap-2">
+                                <Lightbulb className={`h-4 w-4 ${
+                                  suggestion.isEventual ? 'text-orange-600' : 'text-yellow-600'
+                                }`} />
+                                <span className={`font-medium ${
+                                  suggestion.isEventual ? 'text-orange-700' : 'text-yellow-700'
+                                }`}>
+                                  {suggestion.isEventual ? 'Respaldo' : 'Sugerencia'}: {suggestion.name} ({suggestion.rut})
+                                </span>
+                                {suggestion.isEventual ? (
+                                  <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                                    Sin coincidencia - Eventual
+                                  </span>
+                                ) : (
+                                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                                    {Math.round(suggestion.score * 100)}% confianza
+                                  </span>
+                                )}
+                                <Button
+                                  onClick={() => {
+                                    console.log(`🎯 Aplicando sugerencia individual: "${fileWorkerName}" -> "${suggestion.name}" (ID: ${suggestion.id})`)
+                                    handleWorkerMapping(fileWorkerName, suggestion.id)
+                                  }}
+                                  size="sm"
+                                  variant="outline"
+                                  className="ml-auto h-6 text-xs py-1 px-2"
+                                >
+                                  Aplicar
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center">
+                            <select
+                              value={workerMapping.get(fileWorkerName) || ''}
+                              onChange={(e) => handleWorkerMapping(fileWorkerName, e.target.value)}
+                              className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            >
+                              <option value="">Seleccionar trabajador oficial...</option>
+                              {officialWorkers
+                                .sort((a, b) => {
+                                  // Priorizar sugerencia en el orden
+                                  if (suggestion && a.id === suggestion.id) return -1
+                                  if (suggestion && b.id === suggestion.id) return 1
+                                  return a.nombre.localeCompare(b.nombre)
+                                })
+                                .map((worker) => (
+                                  <option key={worker.id} value={worker.id}>
+                                    {worker.nombre} ({worker.rut})
+                                    {suggestion && worker.id === suggestion.id ? ' ⭐ SUGERIDO' : ''}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  
+                  <div className="mt-4 text-sm space-y-3">
+                    {(() => {
+                      const stats = getMappingStats()
+                      const shiftStats = getShiftStats()
+                      
+                      return (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600">
+                              Progreso: {stats.mapped} de {stats.total} trabajadores mapeados
+                            </span>
+                            {isMappingComplete() ? (
+                              <span className="text-green-600 font-medium flex items-center">
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                ✅ Mapeo completo
+                              </span>
+                            ) : stats.canProceed ? (
+                              <span className="text-blue-600 font-medium flex items-center">
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                ✅ Puede proceder
+                              </span>
+                            ) : (
+                              <span className="text-red-600 font-medium flex items-center">
+                                <AlertCircle className="h-4 w-4 mr-1" />
+                                ❌ Sin mapeos
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Estadísticas de turnos */}
+                          {stats.mapped > 0 && (
+                            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="text-blue-800 font-medium mb-2">📊 Resumen de Carga:</div>
+                              <div className="grid grid-cols-2 gap-3 text-xs">
+                                <div className="flex items-center">
+                                  <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+                                  <span className="text-green-700">Se cargarán: {shiftStats.turnosACargar} turnos</span>
+                                </div>
+                                {shiftStats.turnosAOmitir > 0 && (
+                                  <div className="flex items-center">
+                                    <span className="w-3 h-3 bg-orange-500 rounded-full mr-2"></span>
+                                    <span className="text-orange-700">Se omitirán: {shiftStats.turnosAOmitir} turnos</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Trabajadores no mapeados */}
+                          {stats.unmapped > 0 && (
+                            <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                              <div className="text-orange-800 font-medium mb-2">
+                                ⚠️ Trabajadores sin mapear ({stats.unmapped}):
+                              </div>
+                              <div className="text-xs text-orange-700">
+                                {stats.unmappedNames.map((name, index) => (
+                                  <span key={name} className="inline-block bg-orange-100 px-2 py-1 rounded mr-1 mb-1">
+                                    {name}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="text-xs text-orange-600 mt-2 italic">
+                                Los turnos de estos trabajadores no se cargarán en Supabase.
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Información de sugerencias */}
+                          {(() => {
+                            const suggestions = generateMappingSuggestions()
+                            const availableSuggestions = suggestions.size
+                            return availableSuggestions > 0 && (
+                              <div className="flex items-center text-xs text-yellow-700 bg-yellow-50 px-2 py-1 rounded">
+                                <Lightbulb className="h-3 w-3 mr-1" />
+                                {availableSuggestions} sugerencia{availableSuggestions > 1 ? 's' : ''} automática{availableSuggestions > 1 ? 's' : ''} disponible{availableSuggestions > 1 ? 's' : ''}
+                              </div>
+                            )
+                          })()}
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )}
 
               {/* Lista de Archivos */}
               <div className="mb-6">
@@ -1087,21 +1928,64 @@ const UploadFiles = () => {
               <div className="h-4"></div>
             </div>
 
-            <div className="p-6 border-t bg-gray-50 flex justify-end space-x-3 sticky bottom-0">
-              <Button 
-                variant="outline" 
-                onClick={handleModalCancel}
-                className="min-w-[100px]"
-              >
-                Cancelar
-              </Button>
-              <Button 
-                onClick={confirmImport}
-                disabled={hasErrors}
-                className="min-w-[120px]"
-              >
-                Confirmar Importación
-              </Button>
+            <div className="p-6 border-t bg-gray-50 sticky bottom-0">
+              {/* Información sobre destino de guardado */}
+              <div className="mb-4">
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                  <Database className="h-4 w-4" />
+                  <span>Destino de guardado:</span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
+                  <div className="flex items-center space-x-1">
+                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                    <span>localStorage (siempre)</span>
+                  </div>
+                  {saveToSupabase && (
+                    <div className="flex items-center space-x-1">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                      <span>Supabase PostgreSQL</span>
+                    </div>
+                  )}
+                </div>
+                {saveToSupabase && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    ℹ️ Los trabajadores se mapearán manualmente. Solo se cargarán turnos de trabajadores mapeados.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <Button 
+                  variant="outline" 
+                  onClick={handleModalCancel}
+                  className="min-w-[100px]"
+                  disabled={isUploadingToSupabase}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={confirmImport}
+                  disabled={hasErrors || isUploadingToSupabase || (saveToSupabase && showMappingInterface && !getMappingStats().canProceed)}
+                  className="min-w-[120px] flex items-center gap-2"
+                >
+                  {isUploadingToSupabase ? (
+                    <>
+                      <CloudUpload className="h-4 w-4 animate-pulse" />
+                      Subiendo...
+                    </>
+                  ) : (() => {
+                    const stats = getMappingStats()
+                    const isPartialMapping = saveToSupabase && showMappingInterface && stats.unmapped > 0 && stats.mapped > 0
+                    
+                    return (
+                      <>
+                        <CheckCircle className="h-4 w-4" />
+                        {isPartialMapping ? `Importar ${stats.mapped} Trabajadores` : 'Confirmar Importación'}
+                      </>
+                    )
+                  })()}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

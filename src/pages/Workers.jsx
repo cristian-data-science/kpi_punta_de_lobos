@@ -17,11 +17,13 @@ import {
   X,
   RefreshCw,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Upload
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseClient } from '../services/supabaseClient.js'
 import AddWorkerModal from '../components/AddWorkerModal'
+import BulkUploadWorkersModal from '../components/BulkUploadWorkersModal'
 
 const Workers = () => {
   const [workers, setWorkers] = useState([])
@@ -36,12 +38,10 @@ const Workers = () => {
   const [isCreating, setIsCreating] = useState(false)
   const [workerToDelete, setWorkerToDelete] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showBulkUpload, setShowBulkUpload] = useState(false)
 
-  // Conexión directa a Supabase
-  const supabase = createClient(
-    'https://csqxopqlgujduhmwxixo.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzcXhvcHFsZ3VqZHVobXd4aXhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTczNTQ5MzMsImV4cCI6MjA3MjkzMDkzM30.zUiZNsHWFBIqH4KMNSyTE-g68f_t-rpdnpt7VNJ5DSs'
-  )
+  // Conexión singleton de Supabase
+  const supabase = getSupabaseClient()
 
   // Cargar trabajadores directamente desde Supabase
   const loadWorkers = async () => {
@@ -118,10 +118,11 @@ const Workers = () => {
     try {
       console.log('💾 Guardando trabajador editado:', editForm)
       
+      // Nota: El RUT no se edita en línea, por lo que no necesitamos procesarlo aquí
       const { data, error } = await supabase
         .from('trabajadores')
         .update({
-          nombre: editForm.nombre,
+          nombre: editForm.nombre.toUpperCase(), // Asegurar que se guarde en MAYÚSCULAS
           contrato: editForm.contrato,
           telefono: editForm.telefono,
           estado: editForm.estado
@@ -145,26 +146,58 @@ const Workers = () => {
     }
   }
 
+  // Función para asegurar formato correcto de RUT (con guión)
+  const ensureRutWithHyphen = (rut) => {
+    if (!rut) return rut
+    
+    // Si ya tiene guión, devolverlo tal como está
+    if (rut.includes('-')) return rut
+    
+    // Si no tiene guión y tiene la longitud correcta (8-9 dígitos)
+    if (rut.length >= 8 && rut.length <= 9) {
+      // Separar los últimos dígitos (dígito verificador)
+      const rutNumber = rut.slice(0, -1)
+      const verifierDigit = rut.slice(-1)
+      
+      // Agregar el guión
+      return `${rutNumber}-${verifierDigit}`
+    }
+    
+    // Si no se puede formatear, devolver original
+    return rut
+  }
+
   // Crear nuevo trabajador
   const createWorker = async (workerData) => {
     try {
       setIsCreating(true)
       console.log('👤 Creando nuevo trabajador:', workerData)
       
+      // Asegurar formato correcto de RUT antes de verificar duplicados
+      const formattedRut = ensureRutWithHyphen(workerData.rut)
+      console.log('🔧 RUT formateado:', workerData.rut, '→', formattedRut)
+      
       // Verificar que el RUT no exista
       const { data: existingWorker } = await supabase
         .from('trabajadores')
         .select('id, rut')
-        .eq('rut', workerData.rut)
+        .eq('rut', formattedRut)
         .single()
       
       if (existingWorker) {
         throw new Error('Ya existe un trabajador con este RUT')
       }
       
+      // Asegurar que el nombre se guarde en MAYÚSCULAS y RUT con guión
+      const workerDataForDB = {
+        ...workerData,
+        nombre: workerData.nombre.toUpperCase(),
+        rut: formattedRut // Asegurar formato con guión
+      }
+      
       const { data, error } = await supabase
         .from('trabajadores')
-        .insert([workerData])
+        .insert([workerDataForDB])
         .select()
       
       if (error) {
@@ -281,9 +314,9 @@ const Workers = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Trabajadores</h1>
           <p className="text-gray-600 mt-2">
@@ -291,6 +324,14 @@ const Workers = () => {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            onClick={() => setShowBulkUpload(true)}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+            disabled={loading || isCreating}
+          >
+            <Upload className="h-4 w-4" />
+            Carga Masiva
+          </Button>
           <Button 
             onClick={() => setIsAddModalOpen(true)}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
@@ -639,6 +680,16 @@ const Workers = () => {
         onClose={() => setIsAddModalOpen(false)}
         onSave={createWorker}
         isSaving={isCreating}
+      />
+
+      {/* Modal para carga masiva */}
+      <BulkUploadWorkersModal
+        isOpen={showBulkUpload}
+        onClose={() => setShowBulkUpload(false)}
+        onWorkersUploaded={() => {
+          loadWorkers()
+          setShowBulkUpload(false)
+        }}
       />
 
       {/* Modal de confirmación para eliminar trabajador */}

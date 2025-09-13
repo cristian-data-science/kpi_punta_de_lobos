@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseClient } from '../services/supabaseClient.js'
 
 const CopyShiftModal = ({ 
   isOpen, 
@@ -16,43 +16,57 @@ const CopyShiftModal = ({
   const [copying, setCopying] = useState(false)
   const [previewData, setPreviewData] = useState(null)
 
-  // Conexión directa a Supabase
-  const supabase = createClient(
-    'https://csqxopqlgujduhmwxixo.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzcXhvcHFsZ3VqZHVobXd4aXhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTczNTQ5MzMsImV4cCI6MjA3MjkzMDkzM30.zUiZNsHWFBIqH4KMNSyTE-g68f_t-rpdnpt7VNJ5DSs'
-  )
+  // Usar cliente singleton de Supabase
+  const supabase = getSupabaseClient()
 
   // Obtener el lunes de la semana de una fecha
   const getWeekStart = (dateString) => {
     if (!dateString) return null
-    const date = new Date(dateString)
-    const day = date.getDay()
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1) // Ajustar para que el lunes sea día 1
-    const monday = new Date(date.setDate(diff))
-    return monday.toISOString().split('T')[0]
+    
+    // Crear fecha con timezone local para evitar problemas UTC
+    const [year, month, day] = dateString.split('-')
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+    
+    const dayOfWeek = date.getDay()
+    const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1) // Lunes = 1, Domingo = 0 -> -6
+    
+    const monday = new Date(date.getFullYear(), date.getMonth(), diff)
+    
+    // Formatear como YYYY-MM-DD
+    const formattedYear = monday.getFullYear()
+    const formattedMonth = String(monday.getMonth() + 1).padStart(2, '0')
+    const formattedDay = String(monday.getDate()).padStart(2, '0')
+    
+    return `${formattedYear}-${formattedMonth}-${formattedDay}`
   }
 
   // Obtener todos los días de una semana (lunes a domingo)
   const getWeekDays = (mondayDateString) => {
     if (!mondayDateString) return []
-    const monday = new Date(mondayDateString)
+    
+    const [year, month, day] = mondayDateString.split('-')
+    const monday = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
     const days = []
     
     for (let i = 0; i < 7; i++) {
-      const day = new Date(monday)
-      day.setDate(monday.getDate() + i)
-      days.push(day.toISOString().split('T')[0])
+      const currentDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)
+      const formattedYear = currentDay.getFullYear()
+      const formattedMonth = String(currentDay.getMonth() + 1).padStart(2, '0')
+      const formattedDay = String(currentDay.getDate()).padStart(2, '0')
+      days.push(`${formattedYear}-${formattedMonth}-${formattedDay}`)
     }
     
+    console.log(`📅 Calculando días de semana desde ${mondayDateString}:`, days)
     return days
   }
 
   // Formatear rango de semana para mostrar
   const formatWeekRange = (mondayDateString) => {
     if (!mondayDateString) return ''
-    const monday = new Date(mondayDateString)
-    const sunday = new Date(monday)
-    sunday.setDate(monday.getDate() + 6)
+    
+    const [year, month, day] = mondayDateString.split('-')
+    const monday = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+    const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6)
     
     return `${monday.getDate()} ${monday.toLocaleDateString('es-CL', { month: 'short' })} - ${sunday.getDate()} ${sunday.toLocaleDateString('es-CL', { month: 'short', year: 'numeric' })}`
   }
@@ -68,6 +82,7 @@ const CopyShiftModal = ({
   // Obtener vista previa de turnos de la semana origen
   const loadPreview = async () => {
     if (!sourceWeekStart) {
+      console.log('❌ No hay fecha de origen seleccionada')
       setPreviewData(null)
       return
     }
@@ -75,6 +90,7 @@ const CopyShiftModal = ({
     try {
       // Obtener todos los días de la semana
       const weekDays = getWeekDays(sourceWeekStart)
+      console.log('🔍 Buscando turnos en fechas:', weekDays)
       
       const { data, error } = await supabase
         .from('turnos')
@@ -92,6 +108,9 @@ const CopyShiftModal = ({
 
       if (error) throw error
 
+      console.log('✅ Turnos encontrados en base de datos:', data?.length || 0)
+      console.log('📋 Datos completos:', data)
+
       // Agrupar por día y tipo de turno
       const groupedByDay = {}
       let totalShifts = 0
@@ -104,12 +123,17 @@ const CopyShiftModal = ({
         }
       })
 
-      data.forEach(turno => {
+      data?.forEach(turno => {
+        console.log(`📅 Procesando turno: ${turno.fecha} - ${turno.turno_tipo} - ${turno.trabajador?.nombre}`)
         if (groupedByDay[turno.fecha] && groupedByDay[turno.fecha][turno.turno_tipo]) {
           groupedByDay[turno.fecha][turno.turno_tipo].push(turno)
           totalShifts++
+        } else {
+          console.warn(`⚠️ Fecha o tipo de turno no válido: ${turno.fecha} - ${turno.turno_tipo}`)
         }
       })
+
+      console.log('📊 Total de turnos agrupados:', totalShifts)
 
       setPreviewData({
         weekDays,
@@ -129,6 +153,7 @@ const CopyShiftModal = ({
 
     try {
       const weekDays = getWeekDays(targetWeekStart)
+      console.log('🔍 Verificando conflictos en fechas destino:', weekDays)
       
       const { data, error } = await supabase
         .from('turnos')
@@ -136,21 +161,31 @@ const CopyShiftModal = ({
         .in('fecha', weekDays)
 
       if (error) throw error
-      return data.length
+      
+      console.log('📊 Turnos existentes en semana destino:', data?.length || 0)
+      return data?.length || 0
     } catch (error) {
-      console.error('Error verificando conflictos:', error)
+      console.error('❌ Error verificando conflictos:', error)
       return null
     }
   }
 
   // Copiar turnos de semana completa
   const handleCopy = async () => {
-    if (!sourceWeekStart || !targetWeekStart || !previewData) return
+    if (!sourceWeekStart || !targetWeekStart || !previewData) {
+      console.error('❌ Faltan datos para copiar:', { sourceWeekStart, targetWeekStart, previewData })
+      return
+    }
+
+    console.log('🚀 Iniciando copia de turnos...')
+    console.log('📅 Semana origen:', formatWeekRange(sourceWeekStart))
+    console.log('📅 Semana destino:', formatWeekRange(targetWeekStart))
 
     setCopying(true)
     try {
       // Verificar conflictos
       const existingShifts = await checkConflicts()
+      console.log('🔍 Turnos existentes en destino:', existingShifts)
       
       if (existingShifts > 0) {
         const sourceRange = formatWeekRange(sourceWeekStart)
@@ -164,6 +199,7 @@ const CopyShiftModal = ({
           return
         }
 
+        console.log('🗑️ Eliminando turnos existentes en semana destino...')
         // Eliminar turnos existentes de toda la semana destino
         const targetWeekDays = getWeekDays(targetWeekStart)
         const { error: deleteError } = await supabase
@@ -172,6 +208,7 @@ const CopyShiftModal = ({
           .in('fecha', targetWeekDays)
 
         if (deleteError) throw deleteError
+        console.log('✅ Turnos existentes eliminados')
       }
 
       // Crear turnos copiados para toda la semana
@@ -179,6 +216,7 @@ const CopyShiftModal = ({
       const targetWeekDays = getWeekDays(targetWeekStart)
       const turnosToCreate = []
 
+      console.log('📋 Procesando turnos para copiar...')
       sourceWeekDays.forEach((sourceDay, dayIndex) => {
         const targetDay = targetWeekDays[dayIndex]
         const dayShifts = previewData.shifts[sourceDay]
@@ -186,6 +224,7 @@ const CopyShiftModal = ({
         if (dayShifts) {
           Object.entries(dayShifts).forEach(([turnoTipo, turnos]) => {
             turnos.forEach(turno => {
+              console.log(`➕ Agregando turno: ${sourceDay} -> ${targetDay}, ${turnoTipo}, trabajador: ${turno.trabajador?.nombre}`)
               turnosToCreate.push({
                 trabajador_id: turno.trabajador_id,
                 fecha: targetDay,
@@ -197,29 +236,45 @@ const CopyShiftModal = ({
         }
       })
 
+      console.log('📊 Total de turnos a crear:', turnosToCreate.length)
+
       if (turnosToCreate.length > 0) {
-        const { error: insertError } = await supabase
+        console.log('💾 Insertando turnos en base de datos...')
+        const { data: insertedData, error: insertError } = await supabase
           .from('turnos')
           .insert(turnosToCreate)
+          .select()
 
-        if (insertError) throw insertError
+        if (insertError) {
+          console.error('❌ Error insertando turnos:', insertError)
+          throw insertError
+        }
+
+        console.log('✅ Turnos insertados exitosamente:', insertedData?.length || turnosToCreate.length)
+      } else {
+        console.warn('⚠️ No hay turnos para copiar')
+        alert('No se encontraron turnos para copiar en la semana seleccionada.')
+        setCopying(false)
+        return
       }
 
       const sourceRange = formatWeekRange(sourceWeekStart)
       const targetRange = formatWeekRange(targetWeekStart)
-      console.log(`✅ ${turnosToCreate.length} turnos copiados de semana ${sourceRange} a ${targetRange}`)
+      console.log(`🎉 ${turnosToCreate.length} turnos copiados de semana ${sourceRange} a ${targetRange}`)
       
       // Notificar actualización
       if (onShiftsUpdated) {
+        console.log('🔄 Notificando actualización de turnos...')
         onShiftsUpdated()
       }
       
-      alert(`Turnos copiados exitosamente`)
+      alert(`¡Turnos copiados exitosamente!\n\n${turnosToCreate.length} turnos copiados de ${sourceRange} a ${targetRange}`)
       onClose()
 
     } catch (error) {
       console.error('❌ Error copiando turnos:', error)
-      alert('Error al copiar los turnos. Por favor, inténtelo de nuevo.')
+      const errorMessage = error?.message || 'Error desconocido'
+      alert(`Error al copiar los turnos:\n\n${errorMessage}\n\nPor favor, inténtelo de nuevo.`)
     } finally {
       setCopying(false)
     }
@@ -251,7 +306,7 @@ const CopyShiftModal = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+  <div className="fixed inset-0 bg-black/35 backdrop-blur-[1px] z-50 flex items-center justify-center">
       <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">

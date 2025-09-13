@@ -3,12 +3,13 @@
  * 
  * Proporciona funciones CRUD genéricas y manejo de conexión con Supabase.
  * Incluye fallback a localStorage en caso de problemas de conectividad.
+ * Usa cliente singleton para evitar múltiples instancias GoTrueClient.
  * 
  * @author TransApp Development Team
  * @version 1.0.0
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseClient } from './supabaseClient.js'
 
 class SupabaseService {
   constructor() {
@@ -37,17 +38,8 @@ class SupabaseService {
 
       this.connectionStatus = 'connecting'
       
-      this.supabase = createClient(supabaseUrl, supabaseKey, {
-        auth: {
-          persistSession: true,
-          detectSessionInUrl: false
-        },
-        realtime: {
-          params: {
-            eventsPerSecond: 10
-          }
-        }
-      })
+      // Usar cliente singleton en lugar de crear nueva instancia
+      this.supabase = getSupabaseClient()
 
       // Verificar conexión
       const { error } = await this.supabase.from('_health_check').select('*').limit(1)

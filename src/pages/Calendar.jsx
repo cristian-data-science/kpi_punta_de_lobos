@@ -4,7 +4,125 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+import { getSupabaseClient } from '../services/supabaseClient.js'
 import masterDataService from '../services/masterDataService'
+
+// Cliente singleton de Supabase para operaciones de calendario
+const supabase = getSupabaseClient()
+
+// Funciones auxiliares para trabajar con Supabase
+const calendarService = {
+  // Cargar tarifas desde Supabase
+  async loadShiftRates() {
+    try {
+      const { data, error } = await supabase
+        .from('shift_rates')
+        .select('*')
+        .order('rate_name')
+      
+      if (error) throw error
+      
+      // Convertir array a objeto con estructura esperada
+      const rates = {}
+      data.forEach(rate => {
+        rates[rate.rate_name] = rate.rate_value
+      })
+      
+      return rates
+    } catch (error) {
+      console.error('Error cargando tarifas:', error)
+      // Fallback a datos por defecto
+      return {
+        firstSecondShift: 20000,
+        thirdShiftWeekday: 22500, 
+        thirdShiftSaturday: 27500,
+        holiday: 27500,
+        sunday: 35000
+      }
+    }
+  },
+
+  // Cargar feriados desde Supabase  
+  async loadHolidays() {
+    try {
+      const { data, error } = await supabase
+        .from('holidays')
+        .select('holiday_date')
+        .order('holiday_date')
+      
+      if (error) throw error
+      
+      return data.map(h => h.holiday_date)
+    } catch (error) {
+      console.error('Error cargando feriados:', error)
+      // Fallback a feriados por defecto
+      return [
+        '2025-01-01', '2025-04-18', '2025-04-19', '2025-05-01',
+        '2025-05-21', '2025-09-18', '2025-09-19', '2025-12-25'
+      ]
+    }
+  },
+
+  // Guardar tarifas en Supabase
+  async saveShiftRates(rates) {
+    try {
+      const updates = Object.entries(rates).map(([rateName, rateValue]) => ({
+        rate_name: rateName,
+        rate_value: rateValue
+      }))
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('shift_rates')
+          .upsert(update, { 
+            onConflict: 'rate_name',
+            ignoreDuplicates: false 
+          })
+        
+        if (error) throw error
+      }
+      
+      return { success: true }
+    } catch (error) {
+      console.error('Error guardando tarifas:', error)
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Agregar feriado en Supabase
+  async addHoliday(date, description = '') {
+    try {
+      const { error } = await supabase
+        .from('holidays')
+        .insert({ 
+          holiday_date: date, 
+          description 
+        })
+      
+      if (error) throw error
+      return { success: true }
+    } catch (error) {
+      console.error('Error agregando feriado:', error)
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Eliminar feriado de Supabase
+  async removeHoliday(date) {
+    try {
+      const { error } = await supabase
+        .from('holidays')
+        .delete()
+        .eq('holiday_date', date)
+      
+      if (error) throw error
+      return { success: true }
+    } catch (error) {
+      console.error('Error eliminando feriado:', error)
+      return { success: false, error: error.message }
+    }
+  }
+}
 
 const Calendar = () => {
   const [currentWeek, setCurrentWeek] = useState(new Date())
@@ -21,10 +139,28 @@ const Calendar = () => {
     return () => window.removeEventListener('calendarConfigChanged', handler)
   }, [])
 
-  const loadCalendarConfig = () => {
-    const config = masterDataService.getCalendarConfig()
-    setCalendarConfig(config)
-    setShiftRates(config.shiftRates)
+  const loadCalendarConfig = async () => {
+    try {
+      // Cargar tarifas y feriados desde Supabase
+      const [shiftRates, holidays] = await Promise.all([
+        calendarService.loadShiftRates(),
+        calendarService.loadHolidays()
+      ])
+      
+      const config = {
+        shiftRates,
+        holidays
+      }
+      
+      setCalendarConfig(config)
+      setShiftRates(shiftRates)
+    } catch (error) {
+      console.error('Error cargando configuración:', error)
+      // Fallback a localStorage si falla Supabase
+      const config = masterDataService.getCalendarConfig()
+      setCalendarConfig(config)
+      setShiftRates(config.shiftRates)
+    }
   }
 
   // Obtener el lunes de la semana actual
@@ -78,11 +214,37 @@ const Calendar = () => {
     return calendarConfig.holidays.includes(dateKey)
   }
 
-  // Obtener tarifa para un día y turno específico
+  // Obtener tarifa para un día y turno específico usando datos de Supabase
   const getShiftRate = (date, shiftType) => {
     if (!calendarConfig) return 0
+    
     const dateKey = formatDateKey(date)
-    return masterDataService.calculateShiftRate(dateKey, shiftType)
+    const dayOfWeek = date.getDay() // 0 = Domingo, 1 = Lunes, etc.
+    const isHolidayDay = calendarConfig.holidays.includes(dateKey)
+    const validShiftType = shiftType || 1
+
+    // REGLA 1: Domingo siempre paga tarifa de domingo cualquier turno
+    if (dayOfWeek === 0) {
+      return calendarConfig.shiftRates.sunday // 35.000
+    }
+
+    // REGLA 2: Si es festivo (y no es domingo), paga tarifa de feriado cualquier turno  
+    if (isHolidayDay && dayOfWeek !== 0) {
+      return calendarConfig.shiftRates.holiday // 27.500
+    }
+
+    // REGLA 3: Si no aplica lo anterior y es sábado 3er turno, paga tarifa sábado
+    if (dayOfWeek === 6 && validShiftType === 3) {
+      return calendarConfig.shiftRates.thirdShiftSaturday // 27.500
+    }
+
+    // REGLA 4: Si no aplica lo anterior y es lunes a viernes 3er turno, paga tarifa 3er turno
+    if (validShiftType === 3 && dayOfWeek >= 1 && dayOfWeek <= 5) {
+      return calendarConfig.shiftRates.thirdShiftWeekday // 22.500
+    }
+
+    // REGLA 5: En los demás casos (1° o 2° turno lunes a sábado), paga tarifa normal
+    return calendarConfig.shiftRates.firstSecondShift // 20.000
   }
 
   // Navegación de semanas
@@ -103,42 +265,94 @@ const Calendar = () => {
   }
 
   // Agregar feriado
-  const handleAddHoliday = () => {
+  const handleAddHoliday = async () => {
     if (newHoliday) {
-      masterDataService.addHoliday(newHoliday)
-      setNewHoliday('')
-      loadCalendarConfig()
+      const result = await calendarService.addHoliday(newHoliday)
+      if (result.success) {
+        setNewHoliday('')
+        loadCalendarConfig()
+      } else {
+        alert(`Error agregando feriado: ${result.error}`)
+      }
     }
   }
 
   // Eliminar feriado
-  const handleRemoveHoliday = (holiday) => {
-    masterDataService.removeHoliday(holiday)
-    loadCalendarConfig()
+  const handleRemoveHoliday = async (holiday) => {
+    const result = await calendarService.removeHoliday(holiday)
+    if (result.success) {
+      loadCalendarConfig()
+    } else {
+      alert(`Error eliminando feriado: ${result.error}`)
+    }
   }
 
   // Guardar tarifas
-  const handleSaveRates = () => {
-    masterDataService.updateShiftRates(shiftRates)
-    loadCalendarConfig()
-    setShowSettings(false)
+  const handleSaveRates = async () => {
+    const result = await calendarService.saveShiftRates(shiftRates)
+    if (result.success) {
+      loadCalendarConfig()
+      setShowSettings(false)
+      alert('Tarifas guardadas correctamente')
+    } else {
+      alert(`Error guardando tarifas: ${result.error}`)
+    }
   }
 
-  // Exportar configuración
-  const handleExportConfig = () => {
-    masterDataService.downloadCalendarConfig()
+  // Exportar configuración (TODO: actualizar para Supabase)
+  const handleExportConfig = async () => {
+    try {
+      const config = {
+        shiftRates: calendarConfig.shiftRates,
+        holidays: calendarConfig.holidays,
+        exportDate: new Date().toISOString(),
+        source: 'supabase'
+      }
+      
+      const dataStr = JSON.stringify(config, null, 2)
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr)
+      
+      const exportFileDefaultName = `calendar-config-${new Date().toISOString().split('T')[0]}.json`
+      
+      const linkElement = document.createElement('a')
+      linkElement.setAttribute('href', dataUri)
+      linkElement.setAttribute('download', exportFileDefaultName)
+      linkElement.click()
+    } catch (error) {
+      alert('Error exportando configuración: ' + error.message)
+    }
   }
 
-  // Importar configuración
+  // Importar configuración (TODO: actualizar para Supabase) 
   const handleImportConfig = async (event) => {
     const file = event.target.files[0]
     if (file) {
-      const result = await masterDataService.importCalendarConfig(file)
-      if (result.success) {
-        loadCalendarConfig()
-        alert('Configuración importada correctamente')
-      } else {
-        alert(`Error: ${result.message}`)
+      try {
+        const text = await file.text()
+        const config = JSON.parse(text)
+        
+        // Validar estructura básica
+        if (config.shiftRates && config.holidays) {
+          // Guardar tarifas
+          await calendarService.saveShiftRates(config.shiftRates)
+          
+          // Guardar feriados (primero limpiar existentes)
+          const currentHolidays = calendarConfig.holidays || []
+          for (const holiday of currentHolidays) {
+            await calendarService.removeHoliday(holiday)
+          }
+          
+          for (const holiday of config.holidays) {
+            await calendarService.addHoliday(holiday)
+          }
+          
+          loadCalendarConfig()
+          alert('Configuración importada correctamente desde Supabase')
+        } else {
+          throw new Error('Formato de archivo inválido')
+        }
+      } catch (error) {
+        alert(`Error importando configuración: ${error.message}`)
       }
     }
     // Reset input
