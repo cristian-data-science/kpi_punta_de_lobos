@@ -42,7 +42,7 @@ TransApp is a React-based transportation management system for fleet and worker 
 ### Component Architecture
 ```
 Layout (Header + Sidebar + Outlet)
-├── Dashboard (main metrics)
+├── Dashboard (main metrics with optimized filtering)
 ├── Workers/Vehicles/Cobros/Payments (CRUD pages + Excel export)
 │   ├── Workers: Complete CRUD with RUT validation, create/edit/delete, status management
 │   ├── Cobros: Shift-based billing with weekly/monthly filtering and configurable rates
@@ -51,6 +51,61 @@ Layout (Header + Sidebar + Outlet)
 ├── Calendar (shift management with rate calculations)
 └── Settings (configuration)
 ```
+
+## Dashboard Optimization System (PERFORMANCE CRITICAL)
+
+### Advanced Dashboard Architecture (IMPLEMENTED)
+**Location**: `src/pages/Dashboard.jsx` - High-performance analytics interface with optimized filtering system
+**Problem Solved**: Dashboard filters were functional but caused complete page refresh, degrading UX
+**Performance Impact**: Eliminated unnecessary re-renders, maintained scroll position, smooth filter transitions
+
+### Granular useEffect Architecture
+**Before**: Single useEffect reloaded entire dashboard on any filter change
+```javascript
+❌ useEffect(() => {
+    loadDashboardData() // Reloads ALL components
+}, [timeFilters]) // Any change triggers complete refresh
+```
+
+**After**: Four specialized useEffect hooks for targeted updates
+```javascript
+✅ useEffect(() => loadInitialData(), [])                    // One-time initial load
+✅ useEffect(() => loadFinancialData(), [financialRange])    // Financial data only  
+✅ useEffect(() => loadTrendsData(), [trendsRange])          // Trends chart only
+✅ useEffect(() => loadTopWorkersData(), [topWorkersRange])  // Workers ranking only
+```
+
+### Advanced Memoization Pattern
+- **Chart Options**: `useMemo` with specific dependencies prevents ECharts re-initialization
+- **Event Handlers**: `useCallback` for filter handlers prevents child component re-renders
+- **Null Safety**: Robust validation for chart data prevents rendering errors
+- **Performance**: Only affected components update, maintaining UI state and scroll position
+
+### Optimized Filter System
+**Components**:
+- **Financial Filters**: Todo/Año/Mes - Updates financial cards only
+- **Trends Filters**: 7d/30d/90d - Updates trend chart only  
+- **Top Workers Filters**: Todo/Año/Mes - Updates worker rankings only
+
+**Technical Features**:
+- **Independent Updates**: Each filter affects only its specific data section
+- **State Preservation**: User scroll position and UI context maintained
+- **Smooth Transitions**: No page flicker or component reconstruction
+- **Real-time Response**: Immediate visual feedback without loading states
+
+### Performance Optimizations Applied
+1. **Separated Data Loading**: Each useEffect handles specific dashboard section
+2. **Memoized Handlers**: `useCallback` prevents unnecessary function recreation
+3. **Chart Optimization**: ReactECharts components only re-render when data changes
+4. **State Management**: Granular state updates instead of complete dashboard refresh
+5. **Null Handling**: Robust validation prevents rendering errors during data transitions
+
+### UX Improvements Achieved
+- ✅ **No Page Refresh**: Filters update data without losing user context
+- ✅ **Preserved Scroll**: User maintains their viewing position
+- ✅ **Smooth Transitions**: No visual flicker or component destruction
+- ✅ **Independent Filters**: Each filter works without affecting others
+- ✅ **Real-time Updates**: Immediate data changes without loading delays
 
 ## Workers Management Module (COMPLETED)
 
@@ -239,6 +294,67 @@ turnos table:
 - **Priority System**: Missing days > Days without shifts > Incomplete month
 
 ## Development Patterns
+
+### Dashboard Performance Patterns (CRITICAL IMPLEMENTATION)
+
+#### Granular useEffect Pattern (PERFORMANCE BREAKTHROUGH)
+```javascript
+// ✅ CORRECTO: Efectos separados y específicos
+useEffect(() => loadInitialData(), [])                    // Solo carga inicial
+useEffect(() => loadFinancialData(), [financialRange])    // Solo datos financieros
+useEffect(() => loadTrendsData(), [trendsRange])          // Solo gráfico tendencias
+useEffect(() => loadTopWorkersData(), [topWorkersRange])  // Solo ranking trabajadores
+
+// ❌ INCORRECTO: Efecto monolítico
+useEffect(() => {
+    loadDashboardData() // Recarga TODO el dashboard
+}, [timeFilters]) // Cualquier cambio -> refresco completo
+```
+
+#### Advanced Memoization Pattern (PERFORMANCE CRITICAL)
+```javascript
+// ✅ CORRECTO: Memoización con dependencias específicas
+const getTrendsChartOption = useMemo(() => {
+    if (!dashboardData.trends.daily?.length) return null
+    return { /* configuración del gráfico */ }
+}, [dashboardData.trends.daily]) // Solo recalcula cuando cambian tendencias
+
+const handleFinancialFilter = useCallback((newFilter) => {
+    setTimeFilters(prev => ({ ...prev, financialRange: newFilter }))
+}, []) // Handler estable, previene re-renders
+
+// ❌ INCORRECTO: Sin memoización
+const chartOption = { /* se recalcula en cada render */ }
+const handler = (filter) => { /* nueva función en cada render */ }
+```
+
+#### Optimized Filter Handlers Pattern
+```javascript
+// ✅ CORRECTO: Handlers simples y directos
+<button onClick={() => handleFinancialFilter('month')}>
+  Mes
+</button>
+
+// ❌ INCORRECTO: Handlers complejos innecesarios
+<button onClick={(e) => {
+    e.preventDefault()
+    e.stopPropagation() 
+    setTimeFilters(prev => ({ ...prev, financialRange: 'month' }))
+}}>
+```
+
+#### Chart Rendering Optimization
+```javascript
+// ✅ CORRECTO: Validación robusta antes de renderizar
+{dashboardData.trends.daily.length > 0 && getTrendsChartOption ? (
+  <ReactECharts option={getTrendsChartOption} />
+) : (
+  <EmptyState />
+)}
+
+// ❌ INCORRECTO: Sin validación, puede causar errores
+<ReactECharts option={chartOption} />
+```
 
 ### Date Handling & Timezone Consistency
 - **Critical Fix**: All date parsing uses timezone-local creation to prevent UTC offset issues

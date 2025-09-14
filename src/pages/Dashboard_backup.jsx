@@ -17,7 +17,7 @@ import {
   Filter,
   ChevronDown
 } from 'lucide-react'
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { getSupabaseClient } from '@/services/supabaseClient'
 import ReactECharts from 'echarts-for-react'
 
@@ -43,112 +43,46 @@ const Dashboard = () => {
 
   const supabase = getSupabaseClient()
 
-  // ✅ SOLUCIÓN: useEffect separados para cargar datos específicos solo cuando es necesario
-  
-  // 1. Efecto inicial: Cargar datos base (solo una vez)
   useEffect(() => {
-    const loadInitialData = async () => {
-      setDashboardData(prev => ({ ...prev, loading: true }))
-      
-      try {
-        console.log('� Carga inicial del dashboard')
-        
-        // Cargar datos que NO cambian con filtros
-        const [workersData, shiftsData] = await Promise.all([
-          loadWorkersData(),
-          loadShiftsData()
-        ])
-        
-        setDashboardData(prev => ({
-          ...prev,
-          workers: workersData,
-          shifts: shiftsData,
-          shiftDistribution: calculateShiftDistribution(shiftsData),
-          alerts: generateAlerts(workersData, shiftsData, prev.financial),
-          loading: false
-        }))
-        
-      } catch (error) {
-        console.error('❌ Error carga inicial:', error)
-        setDashboardData(prev => ({ ...prev, loading: false }))
-      }
-    }
+    loadDashboardData()
+  }, [timeFilters]) // Se ejecuta cuando cambian los filtros
+
+  const loadDashboardData = async () => {
+    setDashboardData(prev => ({ ...prev, loading: true }))
     
-    loadInitialData()
-  }, []) // ✅ Solo se ejecuta UNA VEZ
-  
-  // 2. Efecto para datos financieros (solo cuando cambia su filtro)
-  useEffect(() => {
-    const loadFilteredFinancialData = async () => {
-      console.log('💰 Actualizando solo datos financieros:', timeFilters.financialRange)
+    try {
+      console.log('🔄 Cargando datos con filtros:', timeFilters) // Debug
       
-      try {
-        const financialData = await loadFinancialData(timeFilters.financialRange)
-        
-        setDashboardData(prev => ({
-          ...prev,
-          financial: financialData,
-          alerts: generateAlerts(prev.workers, prev.shifts, financialData)
-        }))
-        
-      } catch (error) {
-        console.error('❌ Error datos financieros:', error)
-      }
+      // Cargar todos los datos en paralelo, pasando los filtros actuales
+      const [workersData, shiftsData, financialData, trendsData, topWorkersData] = await Promise.all([
+        loadWorkersData(),
+        loadShiftsData(), 
+        loadFinancialData(timeFilters.financialRange),
+        loadTrendsData(timeFilters.trendsRange),
+        loadTopWorkersData(timeFilters.topWorkersRange)
+      ])
+
+      console.log('✅ Datos cargados:', { // Debug
+        financial: financialData,
+        trends: trendsData.daily.length,
+        topWorkers: topWorkersData.length
+      })
+
+      setDashboardData({
+        workers: workersData,
+        shifts: shiftsData,
+        financial: financialData,
+        trends: trendsData,
+        topWorkers: topWorkersData,
+        shiftDistribution: calculateShiftDistribution(shiftsData),
+        alerts: generateAlerts(workersData, shiftsData, financialData),
+        loading: false
+      })
+    } catch (error) {
+      console.error('❌ Error cargando datos del dashboard:', error)
+      setDashboardData(prev => ({ ...prev, loading: false }))
     }
-    
-    // Solo ejecutar si ya tenemos datos base cargados
-    if (!dashboardData.loading) {
-      loadFilteredFinancialData()
-    }
-  }, [timeFilters.financialRange, dashboardData.loading]) // ✅ Solo cuando cambia filtro financiero
-  
-  // 3. Efecto para tendencias (solo cuando cambia su filtro)
-  useEffect(() => {
-    const loadFilteredTrendsData = async () => {
-      console.log('📈 Actualizando solo tendencias:', timeFilters.trendsRange)
-      
-      try {
-        const trendsData = await loadTrendsData(timeFilters.trendsRange)
-        
-        setDashboardData(prev => ({
-          ...prev,
-          trends: trendsData
-        }))
-        
-      } catch (error) {
-        console.error('❌ Error tendencias:', error)
-      }
-    }
-    
-    // Solo ejecutar si ya tenemos datos base cargados
-    if (!dashboardData.loading) {
-      loadFilteredTrendsData()
-    }
-  }, [timeFilters.trendsRange, dashboardData.loading]) // ✅ Solo cuando cambia filtro tendencias
-  
-  // 4. Efecto para top trabajadores (solo cuando cambia su filtro)
-  useEffect(() => {
-    const loadFilteredTopWorkersData = async () => {
-      console.log('👥 Actualizando solo top trabajadores:', timeFilters.topWorkersRange)
-      
-      try {
-        const topWorkersData = await loadTopWorkersData(timeFilters.topWorkersRange)
-        
-        setDashboardData(prev => ({
-          ...prev,
-          topWorkers: topWorkersData
-        }))
-        
-      } catch (error) {
-        console.error('❌ Error top trabajadores:', error)
-      }
-    }
-    
-    // Solo ejecutar si ya tenemos datos base cargados
-    if (!dashboardData.loading) {
-      loadFilteredTopWorkersData()
-    }
-  }, [timeFilters.topWorkersRange, dashboardData.loading]) // ✅ Solo cuando cambia filtro trabajadores
+  }
 
   // Funciones para cargar datos específicos de Supabase
   
@@ -209,49 +143,20 @@ const Dashboard = () => {
       .select('pago, cobro, fecha')
       .eq('estado', 'completado')
 
-    // LÓGICA CORREGIDA: Aplicar filtros basados en datos disponibles
-    let filterDate = null
-    
+    // Aplicar filtros temporales
     if (financialRange === 'month') {
-      // Mostrar solo los últimos 30 días de datos disponibles
-      const { data: allData } = await supabase
-        .from('turnos')
-        .select('fecha')
-        .eq('estado', 'completado')
-        .order('fecha', { ascending: false })
-        .limit(1)
-      
-      if (allData?.length > 0) {
-        const fechaMasReciente = new Date(allData[0].fecha)
-        fechaMasReciente.setDate(fechaMasReciente.getDate() - 30)
-        filterDate = fechaMasReciente.toISOString().split('T')[0]
-        query = query.gte('fecha', filterDate)
-      }
+      const oneMonthAgo = new Date()
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+      query = query.gte('fecha', oneMonthAgo.toISOString().split('T')[0])
     } else if (financialRange === 'year') {
-      // Mostrar solo los últimos 365 días de datos disponibles
-      const { data: allData } = await supabase
-        .from('turnos')
-        .select('fecha')
-        .eq('estado', 'completado')
-        .order('fecha', { ascending: false })
-        .limit(1)
-      
-      if (allData?.length > 0) {
-        const fechaMasReciente = new Date(allData[0].fecha)
-        fechaMasReciente.setDate(fechaMasReciente.getDate() - 365)
-        filterDate = fechaMasReciente.toISOString().split('T')[0]
-        query = query.gte('fecha', filterDate)
-      }
+      const oneYearAgo = new Date()
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+      query = query.gte('fecha', oneYearAgo.toISOString().split('T')[0])
     }
-    // Para 'all', no aplicar filtros
-    
-    console.log('💰 Filtro fecha aplicado:', { financialRange, filterDate }) // Debug crítico
     
     const { data, error } = await query
 
     if (error) throw error
-
-    console.log('💰 Registros encontrados DESPUÉS del filtro:', data?.length) // Debug crítico
 
     const totalCosts = data?.reduce((sum, s) => sum + (s.pago || 0), 0) || 0
     const totalIncome = data?.reduce((sum, s) => sum + (s.cobro || 0), 0) || 0
@@ -278,40 +183,18 @@ const Dashboard = () => {
   const loadTrendsData = async (trendsRange) => {
     console.log('📈 Cargando tendencias con filtro:', trendsRange, 'días') // Debug
     
-    // LÓGICA CORREGIDA: Obtener los últimos N días de datos disponibles
-    let filterDate = null
-    
-    // Obtener la fecha más reciente de los datos
-    const { data: recentData } = await supabase
-      .from('turnos')
-      .select('fecha')
-      .eq('estado', 'completado')
-      .order('fecha', { ascending: false })
-      .limit(1)
-    
-    if (recentData?.length > 0) {
-      const fechaMasReciente = new Date(recentData[0].fecha)
-      fechaMasReciente.setDate(fechaMasReciente.getDate() - trendsRange)
-      filterDate = fechaMasReciente.toISOString().split('T')[0]
-    } else {
-      // Fallback: usar fecha actual
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - trendsRange)
-      filterDate = startDate.toISOString().split('T')[0]
-    }
-    
-    console.log('📈 Filtro fecha aplicado:', { trendsRange, filterDate }) // Debug crítico
+    // Calcular fecha de inicio según filtro
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - trendsRange)
     
     const { data, error } = await supabase
       .from('turnos')
       .select('fecha, estado, pago, cobro')
-      .gte('fecha', filterDate)
+      .gte('fecha', startDate.toISOString().split('T')[0])
       .eq('estado', 'completado')
       .order('fecha', { ascending: true })
     
     if (error) throw error
-
-    console.log('📈 Registros encontrados DESPUÉS del filtro:', data?.length) // Debug crítico
 
     // Agrupar por fecha
     const dailyData = {}
@@ -355,48 +238,20 @@ const Dashboard = () => {
       `)
       .eq('estado', 'completado')
 
-    // Aplicar filtros temporales CORREGIDOS con datos disponibles
-    let filterDate = null
-    if (topWorkersRange === 'month' || topWorkersRange === 'year') {
-      // LÓGICA CORREGIDA: Obtener fechas de los datos disponibles
-      const { data: recentData } = await supabase
-        .from('turnos')
-        .select('fecha')
-        .eq('estado', 'completado')
-        .order('fecha', { ascending: false })
-        .limit(1)
-      
-      if (recentData?.length > 0) {
-        const fechaMasReciente = new Date(recentData[0].fecha)
-        if (topWorkersRange === 'month') {
-          fechaMasReciente.setDate(fechaMasReciente.getDate() - 30) // Últimos 30 días de datos
-        } else if (topWorkersRange === 'year') {
-          fechaMasReciente.setDate(fechaMasReciente.getDate() - 365) // Últimos 365 días de datos
-        }
-        filterDate = fechaMasReciente.toISOString().split('T')[0]
-        query = query.gte('fecha', filterDate)
-      } else if (topWorkersRange === 'month') {
-        // Fallback: usar fecha actual
-        filterDate = new Date()
-        filterDate.setMonth(filterDate.getMonth() - 1)
-        filterDate = filterDate.toISOString().split('T')[0]
-        query = query.gte('fecha', filterDate)
-      } else if (topWorkersRange === 'year') {
-        // Fallback: usar fecha actual
-        filterDate = new Date()
-        filterDate.setFullYear(filterDate.getFullYear() - 1)
-        filterDate = filterDate.toISOString().split('T')[0] 
-        query = query.gte('fecha', filterDate)
-      }
+    // Aplicar filtros temporales usando el parámetro recibido
+    if (topWorkersRange === 'month') {
+      const oneMonthAgo = new Date()
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+      query = query.gte('fecha', oneMonthAgo.toISOString().split('T')[0])
+    } else if (topWorkersRange === 'year') {
+      const oneYearAgo = new Date()
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+      query = query.gte('fecha', oneYearAgo.toISOString().split('T')[0])
     }
-    
-    console.log('👥 Filtro fecha aplicado:', { topWorkersRange, filterDate }) // Debug crítico
     
     const { data, error } = await query
 
     if (error) throw error
-
-    console.log('👥 Registros encontrados ANTES de agrupar:', data?.length) // Debug crítico
 
     // Agrupar por trabajador
     const workerStats = {}
@@ -471,155 +326,130 @@ const Dashboard = () => {
     return `${value > 0 ? '+' : ''}${value}%`
   }
 
-  // ✅ OPTIMIZACIÓN: Memoizar opciones de gráficos para evitar re-renders innecesarios
-  const getTrendsChartOption = useMemo(() => {
-    if (!dashboardData.trends.daily?.length) return null
-    
-    return {
-      tooltip: {
-        trigger: 'axis',
-        backgroundColor: 'rgba(0,0,0,0.8)',
-        textStyle: { color: '#fff' },
-        formatter: (params) => {
-          let result = `<div style="font-weight: bold; margin-bottom: 8px;">${params[0].name}</div>`
-          params.forEach(param => {
-            if (param.seriesName === 'Turnos') {
-              result += `<div style="color: ${param.color};">• ${param.seriesName}: ${param.value}</div>`
-            } else {
-              result += `<div style="color: ${param.color};">• ${param.seriesName}: $${(param.value / 1000000).toFixed(2)}M</div>`
-            }
-          })
-          return result
+  // Configuración de gráficos ECharts
+  const getTrendsChartOption = () => ({
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(0,0,0,0.8)',
+      textStyle: { color: '#fff' },
+      formatter: (params) => {
+        let result = `<div style="font-weight: bold; margin-bottom: 8px;">${params[0].name}</div>`
+        params.forEach(param => {
+          if (param.seriesName === 'Turnos') {
+            result += `<div style="color: ${param.color};">• ${param.seriesName}: ${param.value}</div>`
+          } else {
+            result += `<div style="color: ${param.color};">• ${param.seriesName}: $${(param.value / 1000000).toFixed(2)}M</div>`
+          }
+        })
+        return result
+      }
+    },
+    legend: {
+      data: ['Ingresos', 'Costos', 'Turnos'],
+      textStyle: { color: '#64748b' }
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: dashboardData.trends.daily.map(d => {
+        const date = new Date(d.date)
+        return `${date.getDate()}/${date.getMonth() + 1}`
+      }),
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisLabel: { color: '#64748b' }
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: 'Millones (CLP)',
+        position: 'left',
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisLabel: { 
+          color: '#64748b',
+          formatter: (value) => `$${(value/1000000).toFixed(1)}M`
         }
       },
-      legend: {
-        data: ['Ingresos', 'Costos', 'Turnos'],
-        textStyle: { color: '#64748b' }
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: dashboardData.trends.daily.map(d => {
-          const date = new Date(d.date)
-          return `${date.getDate()}/${date.getMonth() + 1}`
-        }),
+      {
+        type: 'value',
+        name: 'Turnos',
+        position: 'right',
         axisLine: { lineStyle: { color: '#e2e8f0' } },
         axisLabel: { color: '#64748b' }
+      }
+    ],
+    series: [
+      {
+        name: 'Ingresos',
+        type: 'line',
+        data: dashboardData.trends.daily.map(d => d.income),
+        smooth: true,
+        lineStyle: { color: '#10b981', width: 3 },
+        areaStyle: { color: 'rgba(16, 185, 129, 0.1)' }
       },
-      yAxis: [
-        {
-          type: 'value',
-          name: 'Millones (CLP)',
-          position: 'left',
-          axisLine: { lineStyle: { color: '#e2e8f0' } },
-          axisLabel: { 
-            color: '#64748b',
-            formatter: (value) => `$${(value/1000000).toFixed(1)}M`
+      {
+        name: 'Costos',
+        type: 'line',
+        data: dashboardData.trends.daily.map(d => d.costs),
+        smooth: true,
+        lineStyle: { color: '#ef4444', width: 3 },
+        areaStyle: { color: 'rgba(239, 68, 68, 0.1)' }
+      },
+      {
+        name: 'Turnos',
+        type: 'line',
+        yAxisIndex: 1,
+        data: dashboardData.trends.daily.map(d => d.shifts),
+        smooth: true,
+        lineStyle: { color: '#3b82f6', width: 3 }
+      }
+    ]
+  })
+
+  const getShiftDistributionChartOption = () => ({
+    tooltip: {
+      trigger: 'item',
+      formatter: '{a} <br/>{b}: {c} ({d}%)'
+    },
+    legend: {
+      orient: 'vertical',
+      left: 'left',
+      textStyle: { color: '#64748b' }
+    },
+    series: [
+      {
+        name: 'Turnos',
+        type: 'pie',
+        radius: ['40%', '70%'],
+        avoidLabelOverlap: false,
+        label: {
+          show: false,
+          position: 'center'
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: '18',
+            fontWeight: 'bold'
           }
         },
-        {
-          type: 'value',
-          name: 'Turnos',
-          position: 'right',
-          axisLine: { lineStyle: { color: '#e2e8f0' } },
-          axisLabel: { color: '#64748b' }
-        }
-      ],
-      series: [
-        {
-          name: 'Ingresos',
-          type: 'line',
-          data: dashboardData.trends.daily.map(d => d.income),
-          smooth: true,
-          lineStyle: { color: '#10b981', width: 3 },
-          areaStyle: { color: 'rgba(16, 185, 129, 0.1)' }
+        labelLine: {
+          show: false
         },
-        {
-          name: 'Costos',
-          type: 'line',
-          data: dashboardData.trends.daily.map(d => d.costs),
-          smooth: true,
-          lineStyle: { color: '#ef4444', width: 3 },
-          areaStyle: { color: 'rgba(239, 68, 68, 0.1)' }
-        },
-        {
-          name: 'Turnos',
-          type: 'line',
-          yAxisIndex: 1,
-          data: dashboardData.trends.daily.map(d => d.shifts),
-          smooth: true,
-          lineStyle: { color: '#3b82f6', width: 3 }
-        }
-      ]
-    }
-  }, [dashboardData.trends.daily]); // ✅ Solo se recalcula cuando cambian las tendencias
+        data: dashboardData.shiftDistribution.map(item => ({
+          value: item.value,
+          name: item.name,
+          itemStyle: { color: item.color }
+        }))
+      }
+    ]
+  })
 
-  const getShiftDistributionChartOption = useMemo(() => {
-    if (!dashboardData.shiftDistribution?.length) return null
-    
-    return {
-      tooltip: {
-        trigger: 'item',
-        formatter: '{a} <br/>{b}: {c} ({d}%)'
-      },
-      legend: {
-        orient: 'vertical',
-        left: 'left',
-        textStyle: { color: '#64748b' }
-      },
-      series: [
-        {
-          name: 'Turnos',
-          type: 'pie',
-          radius: ['40%', '70%'],
-          avoidLabelOverlap: false,
-          label: {
-            show: false,
-            position: 'center'
-          },
-          emphasis: {
-            label: {
-              show: true,
-              fontSize: '18',
-              fontWeight: 'bold'
-            }
-          },
-          labelLine: {
-            show: false
-          },
-          data: dashboardData.shiftDistribution.map(item => ({
-            value: item.value,
-            name: item.name,
-            itemStyle: { color: item.color }
-          }))
-        }
-      ]
-    }
-  }, [dashboardData.shiftDistribution]); // ✅ Solo se recalcula cuando cambia distribución
-
-  // ✅ OPTIMIZACIÓN: Memoizar handlers de filtros para prevenir re-renders
-  const handleFinancialFilter = useCallback((newFilter) => {
-    console.log('💰 Cambiando filtro financiero:', newFilter)
-    setTimeFilters(prev => ({ ...prev, financialRange: newFilter }))
-  }, [])
-  
-  const handleTrendsFilter = useCallback((newFilter) => {
-    console.log('📈 Cambiando filtro tendencias:', newFilter)
-    setTimeFilters(prev => ({ ...prev, trendsRange: newFilter }))
-  }, [])
-  
-  const handleTopWorkersFilter = useCallback((newFilter) => {
-    console.log('👥 Cambiando filtro trabajadores:', newFilter)
-    setTimeFilters(prev => ({ ...prev, topWorkersRange: newFilter }))
-  }, [])
-
-  // Renderizado condicional para carga
   if (dashboardData.loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -628,7 +458,7 @@ const Dashboard = () => {
           <p className="text-gray-600">Cargando datos del sistema...</p>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -671,17 +501,10 @@ const Dashboard = () => {
           <div className="flex items-center space-x-3">
             <Filter className="h-5 w-5 text-gray-600" />
             <span className="text-sm font-semibold text-gray-700">Filtros Financieros:</span>
-            {dashboardData.loading && (
-              <div className="flex items-center space-x-1 text-xs text-blue-600">
-                <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-600"></div>
-                <span>Actualizando...</span>
-              </div>
-            )}
           </div>
           <div className="flex items-center space-x-2">
             <button
-              type="button"
-              onClick={() => handleFinancialFilter('all')}
+              onClick={() => setTimeFilters(prev => ({ ...prev, financialRange: 'all' }))}
               className={`px-3 py-1 text-xs rounded-lg transition-colors ${
                 timeFilters.financialRange === 'all' 
                   ? 'bg-blue-600 text-white' 
@@ -691,8 +514,7 @@ const Dashboard = () => {
               Todo
             </button>
             <button
-              type="button"
-              onClick={() => handleFinancialFilter('year')}
+              onClick={() => setTimeFilters(prev => ({ ...prev, financialRange: 'year' }))}
               className={`px-3 py-1 text-xs rounded-lg transition-colors ${
                 timeFilters.financialRange === 'year' 
                   ? 'bg-blue-600 text-white' 
@@ -702,8 +524,7 @@ const Dashboard = () => {
               Año
             </button>
             <button
-              type="button"
-              onClick={() => handleFinancialFilter('month')}
+              onClick={() => setTimeFilters(prev => ({ ...prev, financialRange: 'month' }))}
               className={`px-3 py-1 text-xs rounded-lg transition-colors ${
                 timeFilters.financialRange === 'month' 
                   ? 'bg-blue-600 text-white' 
@@ -927,8 +748,7 @@ const Dashboard = () => {
               </div>
               <div className="flex items-center space-x-2">
                 <button
-                  type="button"
-                  onClick={() => handleTrendsFilter(7)}
+                  onClick={() => setTimeFilters(prev => ({ ...prev, trendsRange: 7 }))}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     timeFilters.trendsRange === 7 
                       ? 'bg-blue-600 text-white' 
@@ -938,8 +758,7 @@ const Dashboard = () => {
                   7d
                 </button>
                 <button
-                  type="button"
-                  onClick={() => handleTrendsFilter(30)}
+                  onClick={() => setTimeFilters(prev => ({ ...prev, trendsRange: 30 }))}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     timeFilters.trendsRange === 30 
                       ? 'bg-blue-600 text-white' 
@@ -949,8 +768,7 @@ const Dashboard = () => {
                   30d
                 </button>
                 <button
-                  type="button"
-                  onClick={() => handleTrendsFilter(90)}
+                  onClick={() => setTimeFilters(prev => ({ ...prev, trendsRange: 90 }))}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     timeFilters.trendsRange === 90 
                       ? 'bg-blue-600 text-white' 
@@ -964,9 +782,9 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="h-80">
-              {dashboardData.trends.daily.length > 0 && getTrendsChartOption ? (
+              {dashboardData.trends.daily.length > 0 ? (
                 <ReactECharts 
-                  option={getTrendsChartOption} 
+                  option={getTrendsChartOption()} 
                   style={{ height: '100%', width: '100%' }}
                   opts={{ renderer: 'svg' }}
                 />
@@ -999,8 +817,7 @@ const Dashboard = () => {
               </div>
               <div className="flex items-center space-x-2">
                 <button
-                  type="button"
-                  onClick={() => handleTopWorkersFilter('all')}
+                  onClick={() => setTimeFilters(prev => ({ ...prev, topWorkersRange: 'all' }))}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     timeFilters.topWorkersRange === 'all' 
                       ? 'bg-orange-600 text-white' 
@@ -1010,8 +827,7 @@ const Dashboard = () => {
                   Todo
                 </button>
                 <button
-                  type="button"
-                  onClick={() => handleTopWorkersFilter('year')}
+                  onClick={() => setTimeFilters(prev => ({ ...prev, topWorkersRange: 'year' }))}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     timeFilters.topWorkersRange === 'year' 
                       ? 'bg-orange-600 text-white' 
@@ -1021,8 +837,7 @@ const Dashboard = () => {
                   Año
                 </button>
                 <button
-                  type="button"
-                  onClick={() => handleTopWorkersFilter('month')}
+                  onClick={() => setTimeFilters(prev => ({ ...prev, topWorkersRange: 'month' }))}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     timeFilters.topWorkersRange === 'month' 
                       ? 'bg-orange-600 text-white' 
@@ -1083,9 +898,9 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="h-64">
-              {dashboardData.shiftDistribution.some(d => d.value > 0) && getShiftDistributionChartOption ? (
+              {dashboardData.shiftDistribution.some(d => d.value > 0) ? (
                 <ReactECharts 
-                  option={getShiftDistributionChartOption} 
+                  option={getShiftDistributionChartOption()} 
                   style={{ height: '100%', width: '100%' }}
                   opts={{ renderer: 'svg' }}
                 />
