@@ -92,23 +92,54 @@ const CopyShiftModal = ({
       const weekDays = getWeekDays(sourceWeekStart)
       console.log('🔍 Buscando turnos en fechas:', weekDays)
       
-      const { data, error } = await supabase
-        .from('turnos')
-        .select(`
-          *,
-          trabajador:trabajador_id (
-            id,
-            nombre,
-            rut
-          )
-        `)
-        .in('fecha', weekDays)
-        .order('fecha')
-        .order('turno_tipo')
+      // 🔴 NUEVO: Obtener también los datos de los trabajadores para validar estado
+      const [turnosResult, trabajadoresResult] = await Promise.all([
+        supabase
+          .from('turnos')
+          .select(`
+            *,
+            trabajador:trabajador_id (
+              id,
+              nombre,
+              rut
+            )
+          `)
+          .in('fecha', weekDays)
+          .order('fecha')
+          .order('turno_tipo'),
+        
+        supabase
+          .from('trabajadores')
+          .select('id, estado')
+      ])
 
-      if (error) throw error
+      if (turnosResult.error) throw turnosResult.error
+      if (trabajadoresResult.error) throw trabajadoresResult.error
 
-      console.log('✅ Turnos encontrados en base de datos:', data?.length || 0)
+      const allTurnos = turnosResult.data || []
+      const trabajadores = trabajadoresResult.data || []
+      
+      // 🔴 FILTRAR: Solo turnos PROGRAMADOS de trabajadores inactivos
+      // Los turnos COMPLETADOS se mantienen (históricos)
+      const data = allTurnos.filter(turno => {
+        const trabajador = trabajadores.find(t => t.id === turno.trabajador_id)
+        const isActive = trabajador && trabajador.estado === 'activo'
+        
+        // Si es turno completado, siempre incluir (histórico)
+        if (turno.estado === 'completado') {
+          return true
+        }
+        
+        // Si es turno programado, solo incluir si trabajador está activo
+        if (!isActive && turno.trabajador?.nombre) {
+          console.log(`⚠️ Turno programado excluido - trabajador inactivo: ${turno.trabajador.nombre}`)
+        }
+        
+        return isActive
+      })
+
+      console.log('✅ Turnos encontrados en base de datos:', allTurnos.length)
+      console.log('🔴 Turnos validados (completados + programados activos):', data.length)
       console.log('📋 Datos completos:', data)
 
       // Agrupar por día y tipo de turno

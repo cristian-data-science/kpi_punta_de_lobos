@@ -13,7 +13,8 @@ const Turnos = () => {
   try {
   // Estados principales
   const [turnos, setTurnos] = useState([])
-  const [workers, setWorkers] = useState([])
+  const [workers, setWorkers] = useState([]) // TODOS los trabajadores (activos + inactivos) para validación
+  const [activeWorkers, setActiveWorkers] = useState([]) // Solo trabajadores activos para asignación
   
   // 🚀 SISTEMA INTELIGENTE: Cache de turnos por mes
   const [loadedMonths, setLoadedMonths] = useState(new Set()) // Meses ya cargados
@@ -242,19 +243,26 @@ const Turnos = () => {
   // Cargar trabajadores desde Supabase
   const loadWorkers = async () => {
     try {
+      // 🔴 CAMBIO: Cargar TODOS los trabajadores para validación de estado
       const { data, error } = await supabase
         .from('trabajadores')
         .select('*')
-        .eq('estado', 'activo')
         .order('nombre')
 
       if (error) throw error
       
-      console.log('✅ Trabajadores cargados:', data?.length || 0)
-      setWorkers(data || [])
+      console.log('✅ Trabajadores cargados (todos):', data?.length || 0)
+      setWorkers(data || []) // Todos los trabajadores
+      
+      // Crear array separado solo con trabajadores activos para asignación
+      const activos = (data || []).filter(w => w.estado === 'activo')
+      console.log('🟢 Trabajadores activos:', activos.length)
+      setActiveWorkers(activos)
+      
     } catch (error) {
       console.error('❌ Error cargando trabajadores:', error)
       setWorkers([])
+      setActiveWorkers([])
     }
   }
 
@@ -650,17 +658,34 @@ const Turnos = () => {
     const dateKey = formatDateKey(date)
     const turnosDate = turnos.filter(turno => turno.fecha === dateKey)
     
-    // 🐛 DEBUG: Console logs temporales para diagnosticar
+    // � NUEVO: Filtrar turnos de trabajadores INACTIVOS en la vista del calendario
+    // 🔴 AJUSTE: Solo ocultar turnos PROGRAMADOS de trabajadores inactivos
+    // Los turnos COMPLETADOS se mantienen visibles (históricos para pagos/cobros)
+    const turnosConValidacion = turnosDate.filter(turno => {
+      // Buscar el trabajador completo en el array de workers
+      const worker = workers.find(w => w.id === turno.trabajador_id)
+      
+      // Si es turno completado, siempre mostrar (histórico)
+      if (turno.estado === 'completado') {
+        return true
+      }
+      
+      // Si es turno programado, solo mostrar si trabajador está activo
+      return worker && worker.estado === 'activo'
+    })
+    
+    // 🔴 DEBUG: Console logs temporales para diagnosticar
     if (dateKey === '2025-07-01' || dateKey === '2025-06-30' || dateKey === '2025-07-21') {
       console.log(`🔍 DEBUG getTurnosForDate:`)
       console.log(`  - Fecha buscada: ${dateKey}`)
       console.log(`  - Total turnos en estado: ${turnos.length}`)
       console.log(`  - Turnos para esta fecha: ${turnosDate.length}`)
+      console.log(`  - Turnos validados (completados + programados activos): ${turnosConValidacion.length}`)
       console.log(`  - Primeras 3 fechas en estado:`, turnos.slice(0, 3).map(t => t.fecha))
     }
     
-    return getFilteredTurnos(turnosDate)
-  }, [turnos, searchTerm, filterWorker, filterStatus])
+    return getFilteredTurnos(turnosConValidacion)
+  }, [turnos, workers, searchTerm, filterWorker, filterStatus])
 
   // Agrupar turnos por tipo para una fecha - MEMOIZADO
   const groupTurnosByType = useCallback((date) => {
@@ -1047,6 +1072,45 @@ const Turnos = () => {
     ).length
   }
 
+  // 🆕 NUEVA FUNCIÓN: Detectar el mes predominante de la semana actual
+  const getMesPredominante = () => {
+    // Contar días por mes en la semana actual
+    const mesesCount = {}
+    
+    weekDays.forEach(day => {
+      const monthKey = `${day.getFullYear()}-${day.getMonth()}`
+      mesesCount[monthKey] = (mesesCount[monthKey] || 0) + 1
+    })
+    
+    // Encontrar el mes con más días
+    let maxCount = 0
+    let mesPredominante = null
+    
+    Object.entries(mesesCount).forEach(([monthKey, count]) => {
+      if (count > maxCount) {
+        maxCount = count
+        mesPredominante = monthKey
+      }
+    })
+    
+    return mesPredominante
+  }
+
+  // 🆕 NUEVA FUNCIÓN: Contador de turnos completados del mes predominante
+  const getTurnosCompletadosDelMes = () => {
+    const mesPredominante = getMesPredominante()
+    if (!mesPredominante) return 0
+    
+    const [year, month] = mesPredominante.split('-').map(Number)
+    
+    return turnos.filter(turno => {
+      if (turno.estado !== 'completado') return false
+      
+      const [turnoYear, turnoMonth] = turno.fecha.split('-').map(Number)
+      return turnoYear === year && (turnoMonth - 1) === month // month es 0-based
+    }).length
+  }
+
   // Rollback: Convertir turnos completados de vuelta a programados
   const handleRollbackWeekToProgrammed = async () => {
     try {
@@ -1116,7 +1180,8 @@ const Turnos = () => {
 
   // Generar turnos aleatorios - 15 turnos por día (5 por cada tipo de turno)
   const generateRandomShifts = () => {
-    if (workers.length === 0) {
+    // 🔴 CAMBIO: Usar activeWorkers en lugar de workers
+    if (activeWorkers.length === 0) {
       return []
     }
 
@@ -1134,13 +1199,13 @@ const Turnos = () => {
       shiftTypes.forEach(shiftType => {
         const assignedWorkersForShift = new Set() // Evitar duplicados en el mismo turno
         let attempts = 0
-        const maxAttempts = workers.length * 3 // Límite de intentos para evitar loop infinito
+        const maxAttempts = activeWorkers.length * 3 // Límite de intentos para evitar loop infinito
         
         for (let i = 0; i < 5 && attempts < maxAttempts; i++) {
           attempts++
           
-          // Seleccionar trabajador aleatorio
-          const randomWorker = workers[Math.floor(Math.random() * workers.length)]
+          // Seleccionar trabajador aleatorio de los ACTIVOS
+          const randomWorker = activeWorkers[Math.floor(Math.random() * activeWorkers.length)]
           const uniqueShiftKey = `${randomWorker.id}-${shiftType}`
           const uniqueDayKey = `${randomWorker.id}-${dateKey}`
           
@@ -1181,8 +1246,9 @@ const Turnos = () => {
   // Crear turnos aleatorios con confirmación
   const handleCreateRandomShifts = async () => {
     try {
-      if (workers.length === 0) {
-        alert('No hay trabajadores disponibles para crear turnos aleatorios')
+      // 🔴 CAMBIO: Usar activeWorkers para validación
+      if (activeWorkers.length === 0) {
+        alert('No hay trabajadores activos disponibles para crear turnos aleatorios')
         return
       }
 
@@ -1277,13 +1343,14 @@ Esta acción creará turnos reales en la base de datos.`
     const futureTurnos = filteredTurnos.filter(t => t.fecha >= tomorrowKey)
     
     return {
-      totalWorkers: workers.length,
+      totalWorkers: activeWorkers.length, // 🔴 CAMBIO: Solo contar trabajadores activos
       weekTurnos: weekTurnos,
       programados: futureTurnos.filter(t => t.estado === 'programado').length,
-      completados: futureTurnos.filter(t => t.estado === 'completado').length,
+      // 🔧 NUEVO: Usar contador mensual dinámico del mes predominante
+      completados: getTurnosCompletadosDelMes(),
       filteredTotal: filteredTurnos.length
     }
-  }, [turnos, weekDays, workers.length, searchTerm, filterWorker, filterStatus, getTurnosForDate])
+  }, [turnos, weekDays, activeWorkers.length, searchTerm, filterWorker, filterStatus, getTurnosForDate])
 
   if (loading) {
     return (
@@ -1360,7 +1427,8 @@ Esta acción creará turnos reales en la base de datos.`
                 className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">Todos los trabajadores</option>
-                {workers.map(worker => (
+                {/* 🔴 CAMBIO: Usar activeWorkers para el filtro */}
+                {activeWorkers.map(worker => (
                   <option key={worker.id} value={worker.id}>
                     {formatWorkerName(worker.nombre)}
                   </option>
@@ -1447,7 +1515,7 @@ Esta acción creará turnos reales en la base de datos.`
             <div className="flex items-center gap-2">
               <Badge className="h-5 w-5 text-purple-600" />
               <div>
-                <p className="text-sm text-gray-600">Turnos Completados</p>
+                <p className="text-sm text-gray-600">Turnos Completados Este Mes</p>
                 <p className="text-2xl font-bold">{stats.completados}</p>
                 {(searchTerm || filterWorker !== 'all' || filterStatus !== 'all') && (
                   <p className="text-xs text-gray-500">filtrados</p>
@@ -1461,64 +1529,11 @@ Esta acción creará turnos reales en la base de datos.`
       {/* Vista Semanal */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-center">
             <CardTitle className="flex items-center gap-2">
               <CalendarIcon className="h-5 w-5" />
               {`Semana: ${weekRange}`}
             </CardTitle>
-            <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
-                  ← Anterior
-                </Button>
-                <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
-                  Hoy
-                </Button>
-                <Button variant="outline" size="sm" onClick={goToNextWeek}>
-                  Siguiente →
-                </Button>
-                <div className="border-l border-gray-300 mx-2 h-8"></div>
-                {isWeekEmpty() ? (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleCreateRandomShifts}
-                    className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Crear turnos aleatorios
-                  </Button>
-                ) : hasWeekCompletedShifts() ? (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleRollbackWeekToProgrammed}
-                    className="bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100"
-                  >
-                    <RotateCcw className="h-4 w-4 mr-1" />
-                    Revertir a programado
-                  </Button>
-                ) : (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleMarkWeekAsCompleted}
-                    disabled={isMarkingWeekCompleted}
-                    className="bg-green-50 border-green-300 text-green-700 hover:bg-green-100 disabled:opacity-60"
-                  >
-                    {isMarkingWeekCompleted ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-700 mr-2"></div>
-                        Procesando...
-                      </>
-                    ) : (
-                      <>
-                        <Check className="h-4 w-4 mr-1" />
-                        Marcar semana completada
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -1671,6 +1686,61 @@ Esta acción creará turnos reales en la base de datos.`
                 </div>
               )}
               
+              {/* 🔄 BOTONES MOVIDOS: Navegación y acciones más cerca del calendario */}
+              <div className="flex flex-wrap gap-2 justify-center mb-4 p-4 bg-gray-50 rounded-lg">
+                <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
+                  ← Anterior
+                </Button>
+                <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
+                  Hoy
+                </Button>
+                <Button variant="outline" size="sm" onClick={goToNextWeek}>
+                  Siguiente →
+                </Button>
+                <div className="border-l border-gray-300 mx-2 h-8"></div>
+                {isWeekEmpty() ? (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleCreateRandomShifts}
+                    className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Crear turnos aleatorios
+                  </Button>
+                ) : hasWeekCompletedShifts() ? (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleRollbackWeekToProgrammed}
+                    className="bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100"
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    Revertir a programado
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleMarkWeekAsCompleted}
+                    disabled={isMarkingWeekCompleted}
+                    className="bg-green-50 border-green-300 text-green-700 hover:bg-green-100 disabled:opacity-60"
+                  >
+                    {isMarkingWeekCompleted ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-700 mr-2"></div>
+                        Procesando...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4 mr-1" />
+                        Marcar semana completada
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+              
               <div className="grid grid-cols-7 gap-2">
               {weekDays.map((day, index) => {
               const isToday = formatDateKey(day) === formatDateKey(new Date())
@@ -1781,7 +1851,7 @@ Esta acción creará turnos reales en la base de datos.`
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         selectedDate={selectedDate}
-        workers={workers}
+        workers={activeWorkers}
         existingShifts={turnos}
         onShiftsUpdated={handleShiftsUpdated}
         turnosConfig={turnosConfig}
