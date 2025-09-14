@@ -189,10 +189,10 @@ const Login = () => {
               <Button
                 type="submit"
                 disabled={loading || isLocked}
-                className={`w-full h-12 font-medium rounded-lg transition-all duration-200 shadow-lg ${
+                className={`w-full h-12 font-medium rounded-lg transition-colors duration-150 shadow-lg ${
                   isLocked 
                     ? 'bg-gray-400 cursor-not-allowed' 
-                    : 'bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700 transform hover:scale-[1.02]'
+                    : 'bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700'
                 } text-white`}
               >
                 {loading ? (

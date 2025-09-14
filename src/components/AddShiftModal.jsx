@@ -12,7 +12,9 @@ const AddShiftModal = ({
   selectedDate, 
   workers = [], 
   existingShifts = [],
-  onShiftsUpdated 
+  onShiftsUpdated,
+  turnosConfig = {},
+  validateTurnosRules = () => ({ isValid: true, violations: [] })
 }) => {
   // Estados del modal
   const [loading, setLoading] = useState(false)
@@ -27,6 +29,12 @@ const AddShiftModal = ({
     segundo_turno: [],
     tercer_turno: []
   })
+  
+  // Estado para alertas de validación
+  const [validationAlerts, setValidationAlerts] = useState([])
+  
+  // Estado para todos los turnos (para validaciones de día siguiente)
+  const [allTurnos, setAllTurnos] = useState([])
 
   // Usar cliente singleton de Supabase
   const supabase = getSupabaseClient()
@@ -67,6 +75,7 @@ const AddShiftModal = ({
       loadCalendarConfig()
       loadCurrentRates()
       loadExistingAssignments()
+      loadAllTurnos() // Cargar todos los turnos para validaciones de día siguiente
     }
   }, [isOpen, selectedDate, existingShifts])
 
@@ -100,6 +109,131 @@ const AddShiftModal = ({
     setCalendarConfig(config)
   }
 
+  // Validar reglas de turnos cuando cambian las asignaciones
+  const validateCurrentAssignments = () => {
+    if (!turnosConfig.enforceRules || !turnosConfig.showAlerts) {
+      setValidationAlerts([])
+      return
+    }
+
+    const allAlerts = []
+
+    // Crear turnos simulados para validación
+    const simulatedTurnos = []
+    Object.entries(shiftAssignments).forEach(([turnoTipo, trabajadores]) => {
+      trabajadores.forEach(trabajadorId => {
+        const worker = workers.find(w => w.id === trabajadorId)
+        if (worker) {
+          simulatedTurnos.push({
+            fecha: selectedDate.toISOString().split('T')[0],
+            turno_tipo: turnoTipo,
+            trabajador_id: trabajadorId,
+            trabajador: { nombre: worker.nombre }
+          })
+        }
+      })
+    })
+
+    // Validar cada trabajador
+    Object.entries(shiftAssignments).forEach(([turnoTipo, trabajadores]) => {
+      trabajadores.forEach(trabajadorId => {
+        const worker = workers.find(w => w.id === trabajadorId)
+        if (!worker) return
+
+        const validation = validateTurnosRules(
+          trabajadorId,
+          selectedDate.toISOString().split('T')[0], 
+          turnoTipo, 
+          shiftAssignments
+        )
+
+        if (!validation.valid) {
+          allAlerts.push({
+            id: `${trabajadorId}-${turnoTipo}-overlap`,
+            type: 'warning',
+            message: `${formatWorkerName(worker.nombre)}: ${validation.message}`
+          })
+        }
+      })
+    })
+
+    // Validar límites por tipo de turno
+    Object.entries(shiftAssignments).forEach(([turnoTipo, trabajadores]) => {
+      const limit = turnosConfig.shiftLimits?.[turnoTipo] || 8
+      if (trabajadores.length > limit) {
+        allAlerts.push({
+          id: `limit-${turnoTipo}`,
+          type: 'error',
+          message: `${turnoTipo.replace('_', ' ').toUpperCase()}: Excede el límite máximo de ${limit} trabajadores (actual: ${trabajadores.length})`
+        })
+      }
+    })
+
+    setValidationAlerts(allAlerts)
+  }
+
+  // Ejecutar validación cuando cambien las asignaciones
+  useEffect(() => {
+    validateCurrentAssignments()
+  }, [shiftAssignments, turnosConfig, selectedDate])
+
+  // Cargar todos los turnos para validaciones de día siguiente
+  const loadAllTurnos = async () => {
+    try {
+      const { data: turnos, error } = await supabase
+        .from('turnos')
+        .select('*')
+        .order('fecha', { ascending: false })
+      
+      if (error) {
+        console.error('❌ Error cargando todos los turnos:', error)
+        return
+      }
+
+      setAllTurnos(turnos)
+    } catch (error) {
+      console.error('❌ Error en loadAllTurnos:', error)
+    }
+  }
+
+  // Validar reglas de día siguiente usando datos locales
+  const validateNextDayRulesLocal = (workerId, dateKey, shiftType) => {
+    if (!turnosConfig.enforceRules || !turnosConfig.nextDayRules.enforceNextDayRule) {
+      return { valid: true, message: '' }
+    }
+    
+    // Calcular fecha del día anterior
+    const currentDate = new Date(dateKey)
+    const previousDay = new Date(currentDate)
+    previousDay.setDate(currentDate.getDate() - 1)
+    const previousDayKey = previousDay.toISOString().split('T')[0]
+    
+    // Verificar si el trabajador tuvo 3er turno el día anterior
+    const had3rdShiftYesterday = allTurnos.some(t => 
+      t.trabajador_id === workerId &&
+      t.fecha === previousDayKey &&
+      t.turno_tipo === 'tercer_turno' &&
+      t.estado !== 'cancelado'
+    )
+    
+    if (had3rdShiftYesterday) {
+      const allowedNextDay = turnosConfig.nextDayRules.after3rd || ['segundo_turno']
+      if (!allowedNextDay.includes(shiftType)) {
+        const shiftNames = { 
+          'primer_turno': '1º Turno', 
+          'segundo_turno': '2º Turno', 
+          'tercer_turno': '3º Turno' 
+        }
+        return {
+          valid: false,
+          message: `El trabajador tuvo 3º turno ayer. Hoy solo puede tener: ${allowedNextDay.map(s => shiftNames[s]).join(', ')}`
+        }
+      }
+    }
+    
+    return { valid: true, message: '' }
+  }
+
   // Cargar asignaciones existentes y sus datos completos
   const loadExistingAssignments = () => {
     if (!selectedDate || !existingShifts.length) return
@@ -119,15 +253,25 @@ const AddShiftModal = ({
       tercer_turno: []
     }
 
+    // Usar Set para prevenir duplicados por trabajador_id y turno_tipo
+    const seenWorkerShifts = new Set()
+
     dateShifts.forEach(shift => {
       if (assignments[shift.turno_tipo] && shift.trabajador?.id) {
-        assignments[shift.turno_tipo].push(shift.trabajador.id)
-        shiftsData[shift.turno_tipo].push({
-          id: shift.id,
-          trabajador_id: shift.trabajador.id,
-          estado: shift.estado,
-          pago: shift.pago || 0
-        })
+        // Crear clave única para trabajador + turno
+        const uniqueKey = `${shift.trabajador.id}-${shift.turno_tipo}`
+        
+        // Solo agregar si no hemos visto esta combinación antes
+        if (!seenWorkerShifts.has(uniqueKey)) {
+          seenWorkerShifts.add(uniqueKey)
+          assignments[shift.turno_tipo].push(shift.trabajador.id)
+          shiftsData[shift.turno_tipo].push({
+            id: shift.id,
+            trabajador_id: shift.trabajador.id,
+            estado: shift.estado,
+            pago: shift.pago || 0
+          })
+        }
       }
     })
 
@@ -214,20 +358,55 @@ const AddShiftModal = ({
           [turnoType]: currentAssignments.filter(id => id !== workerId)
         }
       } else {
-        // Verificar límite máximo
-        if (currentAssignments.length >= MAX_WORKERS_PER_SHIFT) {
-          alert(`Máximo ${MAX_WORKERS_PER_SHIFT} trabajadores por turno`)
+        // Verificar límite máximo basado en configuración
+        const maxLimit = turnosConfig.shiftLimits?.[turnoType] || MAX_WORKERS_PER_SHIFT
+        if (currentAssignments.length >= maxLimit) {
+          alert(`Máximo ${maxLimit} trabajadores por turno`)
           return prev
         }
         
-        // Verificar si el trabajador ya está asignado en otro turno el mismo día
-        const isAssignedInOtherShift = Object.entries(prev).some(([type, assignments]) => 
-          type !== turnoType && assignments.includes(workerId)
-        )
-        
-        if (isAssignedInOtherShift) {
-          alert('El trabajador ya está asignado en otro turno para esta fecha')
-          return prev
+        // Verificar reglas de configuración si están activas
+        if (turnosConfig.enforceRules) {
+          const isAssignedInOtherShift = Object.entries(prev).some(([type, assignments]) => 
+            type !== turnoType && assignments.includes(workerId)
+          )
+          
+          if (isAssignedInOtherShift) {
+            // Verificar si esta combinación está permitida
+            const otherType = Object.entries(prev).find(([type, assignments]) => 
+              type !== turnoType && assignments.includes(workerId)
+            )[0]
+            
+            const shiftNumbers = {
+              'primer_turno': 1,
+              'segundo_turno': 2,
+              'tercer_turno': 3
+            }
+            
+            const currentShiftNum = shiftNumbers[turnoType]
+            const otherShiftNum = shiftNumbers[otherType]
+            const combination = `${Math.min(currentShiftNum, otherShiftNum)}_${Math.max(currentShiftNum, otherShiftNum)}`
+            
+            // Solo bloquear si la combinación específicamente no está permitida
+            if (turnosConfig.allowedCombinations[combination] === false) {
+              const shiftNames = {
+                'primer_turno': '1º Turno',
+                'segundo_turno': '2º Turno',
+                'tercer_turno': '3º Turno'
+              }
+              alert(`No se permite la combinación de ${shiftNames[otherType]} y ${shiftNames[turnoType]} para el mismo trabajador`)
+              return prev
+            }
+          }
+          
+          // Verificar reglas de día siguiente
+          if (turnosConfig.nextDayRules.enforceNextDayRule) {
+            const nextDayValidation = validateNextDayRulesLocal(workerId, selectedDate.toISOString().split('T')[0], turnoType)
+            if (!nextDayValidation.valid) {
+              alert(nextDayValidation.message)
+              return prev
+            }
+          }
         }
         
         // Agregar trabajador
@@ -244,15 +423,52 @@ const AddShiftModal = ({
     return shiftAssignments[turnoType]?.includes(workerId) || false
   }
 
-  // Verificar si un trabajador está deshabilitado
+  // Verificar si un trabajador está deshabilitado basado en reglas de configuración
   const isWorkerDisabled = (turnoType, workerId) => {
-    // En modo edición, solo deshabilitar si el trabajador está seleccionado en OTRO turno
-    // pero permitir moverlo si ya estaba asignado (para poder editarlo)
-    const otherTurnoAssignments = Object.entries(shiftAssignments).filter(([type]) => type !== turnoType)
+    // Si no hay reglas activas, permitir cualquier asignación
+    if (!turnosConfig.enforceRules) return false
     
-    return otherTurnoAssignments.some(([type, assignments]) => {
-      return assignments.includes(workerId)
-    })
+    // Verificar combinaciones permitidas
+    const otherAssignments = Object.entries(shiftAssignments).filter(([type]) => type !== turnoType)
+    
+    for (const [otherType, assignments] of otherAssignments) {
+      if (assignments.includes(workerId)) {
+        // Verificar si esta combinación está permitida
+        const shiftNumbers = {
+          'primer_turno': 1,
+          'segundo_turno': 2,
+          'tercer_turno': 3
+        }
+        
+        const currentShiftNum = shiftNumbers[turnoType]
+        const otherShiftNum = shiftNumbers[otherType]
+        const combination = `${Math.min(currentShiftNum, otherShiftNum)}_${Math.max(currentShiftNum, otherShiftNum)}`
+        
+        // Si la combinación no está permitida, deshabilitar
+        if (turnosConfig.allowedCombinations[combination] === false) {
+          return true
+        }
+      }
+    }
+    
+    // Verificar reglas de día siguiente
+    if (turnosConfig.nextDayRules.enforceNextDayRule) {
+      const nextDayValidation = validateNextDayRulesLocal(workerId, selectedDate.toISOString().split('T')[0], turnoType)
+      if (!nextDayValidation.valid) {
+        return true
+      }
+    }
+    
+    // Verificar límites por tipo de turno
+    const currentAssignments = shiftAssignments[turnoType] || []
+    const limit = turnosConfig.shiftLimits?.[turnoType] || 8
+    
+    // Si ya está en el límite y el trabajador no está asignado, deshabilitar
+    if (currentAssignments.length >= limit && !currentAssignments.includes(workerId)) {
+      return true
+    }
+    
+    return false
   }
 
   // Obtener trabajador por ID
@@ -319,6 +535,64 @@ const AddShiftModal = ({
     return { totalWorkers, totalAmount }
   }
 
+  // Limpiar duplicados existentes en la base de datos
+  const cleanDuplicateShifts = async (dateKey) => {
+    try {
+      console.log(`🧹 Limpiando duplicados para ${dateKey}`)
+      
+      // Obtener todos los turnos de la fecha
+      const { data: allShifts, error: fetchError } = await supabase
+        .from('turnos')
+        .select('*')
+        .eq('fecha', dateKey)
+        .order('created_at', { ascending: true })
+
+      if (fetchError) {
+        console.error('❌ Error obteniendo turnos:', fetchError)
+        return false
+      }
+
+      if (!allShifts || allShifts.length === 0) return true
+
+      // Encontrar duplicados (mismo trabajador_id + turno_tipo + fecha)
+      const uniqueShifts = []
+      const duplicateIds = []
+      const seenCombinations = new Set()
+
+      allShifts.forEach(shift => {
+        const uniqueKey = `${shift.trabajador_id}-${shift.turno_tipo}`
+        
+        if (!seenCombinations.has(uniqueKey)) {
+          seenCombinations.add(uniqueKey)
+          uniqueShifts.push(shift)
+        } else {
+          duplicateIds.push(shift.id)
+          console.log(`🗑️ Duplicado encontrado: trabajador ${shift.trabajador_id} en ${shift.turno_tipo}`)
+        }
+      })
+
+      // Eliminar duplicados si los hay
+      if (duplicateIds.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('turnos')
+          .delete()
+          .in('id', duplicateIds)
+
+        if (deleteError) {
+          console.error('❌ Error eliminando duplicados:', deleteError)
+          return false
+        }
+
+        console.log(`✅ ${duplicateIds.length} duplicados eliminados`)
+      }
+
+      return true
+    } catch (error) {
+      console.error('❌ Error en cleanDuplicateShifts:', error)
+      return false
+    }
+  }
+
   // Guardar turnos
   const handleSave = async () => {
     if (!selectedDate) return
@@ -330,7 +604,13 @@ const AddShiftModal = ({
       const dateKey = formatDateKey(selectedDate)
       console.log(`🔄 Procesando turnos para ${dateKey}`)
       
-      // Primero, eliminar turnos existentes para esta fecha
+      // Primero, limpiar duplicados existentes
+      const cleanupSuccess = await cleanDuplicateShifts(dateKey)
+      if (!cleanupSuccess) {
+        throw new Error('Error limpiando duplicados existentes')
+      }
+      
+      // Luego, eliminar turnos existentes para esta fecha
       const { error: deleteError } = await supabase
         .from('turnos')
         .delete()
@@ -343,16 +623,25 @@ const AddShiftModal = ({
 
       // Crear nuevos turnos
       const turnosToCreate = []
+      const seenCombinations = new Set() // Prevenir duplicados
 
       turnoTypes.forEach(turno => {
         const assignments = shiftAssignments[turno.id] || []
         assignments.forEach(workerId => {
-          turnosToCreate.push({
-            trabajador_id: workerId,
-            fecha: dateKey,
-            turno_tipo: turno.id,
-            estado: 'programado'
-          })
+          const uniqueKey = `${workerId}-${turno.id}-${dateKey}`
+          
+          // Solo agregar si no hemos visto esta combinación
+          if (!seenCombinations.has(uniqueKey)) {
+            seenCombinations.add(uniqueKey)
+            turnosToCreate.push({
+              trabajador_id: workerId,
+              fecha: dateKey,
+              turno_tipo: turno.id,
+              estado: 'programado'
+            })
+          } else {
+            console.warn(`⚠️ Duplicado prevenido: ${workerId} en ${turno.id} para ${dateKey}`)
+          }
         })
       })
 
@@ -391,66 +680,106 @@ const AddShiftModal = ({
   const isSunday = selectedDate && selectedDate.getDay() === 0
 
   return (
-  <div className="fixed inset-0 bg-black/35 backdrop-blur-[1px] z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-5xl w-full h-[95vh] flex flex-col overflow-hidden">
+  <div className="fixed inset-0 bg-black/35 backdrop-blur-[1px] z-[60] flex items-start justify-center p-4 pt-20">
+      <div className="bg-white rounded-lg max-w-5xl w-full h-[90vh] flex flex-col overflow-hidden shadow-2xl">
         {/* Header - Fijo */}
-        <div className="flex-shrink-0 flex items-center justify-between p-6 border-b">
-          <div className="flex items-center gap-3">
-            <Clock className="h-6 w-6 text-blue-600" />
-            <div>
-              <h3 className="text-xl font-semibold text-gray-900">
-                Asignar Turnos
-              </h3>
-              <p className="text-sm text-gray-600">
-                {selectedDate && formatDisplayDate(selectedDate)}
-                {isHolidayDate && (
-                  <Badge className="ml-2 bg-red-100 text-red-800">
-                    FERIADO
-                  </Badge>
-                )}
-                {isSunday && (
-                  <Badge className="ml-2 bg-orange-100 text-orange-800">
-                    DOMINGO
-                  </Badge>
-                )}
-              </p>
+        <div className="flex-shrink-0 border-b">
+          {/* Header principal: Título a la izquierda, información a la derecha */}
+          <div className="flex items-center justify-between p-6">
+            <div className="flex items-center gap-3">
+              <Clock className="h-6 w-6 text-blue-600" />
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Asignar Turnos
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {selectedDate && formatDisplayDate(selectedDate)}
+                  {isHolidayDate && (
+                    <Badge className="ml-2 bg-red-100 text-red-800">
+                      FERIADO
+                    </Badge>
+                  )}
+                  {isSunday && (
+                    <Badge className="ml-2 bg-orange-100 text-orange-800">
+                      DOMINGO
+                    </Badge>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              {/* Información de tarifas */}
+              {selectedDate && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <Users className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-medium text-blue-800 mb-1">
+                        Información de Tarifas y Estados
+                      </p>
+                      <div className="text-blue-700 space-y-0.5">
+                        <p>• <strong>PROGRAMADO:</strong> Tarifas del sistema</p>
+                        <p>• <strong>COMPLETADO:</strong> Pago real registrado</p>
+                        <p>• Usa "Eliminar todos" para borrar turnos</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Alertas de validación */}
+              {validationAlerts.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 max-w-md">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-medium text-yellow-800 mb-1">
+                        Alertas de Reglas de Turnos
+                      </p>
+                      <div className="text-yellow-700 space-y-0.5">
+                        {validationAlerts.slice(0, 3).map(alert => (
+                          <p key={alert.id} className="flex items-start gap-1">
+                            <span className={`font-bold ${alert.type === 'error' ? 'text-red-600' : 'text-yellow-600'}`}>
+                              {alert.type === 'error' ? '❌' : '⚠️'}
+                            </span>
+                            <span className="text-xs">{alert.message}</span>
+                          </p>
+                        ))}
+                        {validationAlerts.length > 3 && (
+                          <p className="text-yellow-600 font-medium">
+                            ...y {validationAlerts.length - 3} alertas más
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Botón cerrar */}
+              <Button variant="ghost" size="sm" onClick={onClose}>
+                <X className="h-5 w-5" />
+              </Button>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
 
-        {/* Información de edición */}
-        {selectedDate && (
-          <div className="flex-shrink-0 bg-blue-50 border-l-4 border-blue-400 p-4 mx-6 mt-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <Users className="h-5 w-5 text-blue-400 mr-3" />
-                <div>
-                  <p className="text-sm font-medium text-blue-800">
-                    Información de Tarifas y Estados
-                  </p>
-                  <p className="text-sm text-blue-700">
-                    • <strong>PROGRAMADO:</strong> Muestra tarifas actuales del sistema<br/>
-                    • <strong>COMPLETADO:</strong> Muestra el pago real registrado<br/>
-                    • Usa "Eliminar todos" para borrar todos los turnos del día
-                  </p>
-                </div>
-              </div>
+          {/* Barra de separación con botón eliminar */}
+          {selectedDate && (
+            <div className="bg-gray-50 px-6 py-2 border-t">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={clearAllAssignments}
-                className="text-red-600 border-red-300 hover:bg-red-50 ml-4"
+                className="text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400"
                 title="Eliminar todos los turnos de este día"
               >
                 <Trash2 className="h-4 w-4 mr-1" />
                 Eliminar todos
               </Button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Content - Scrolleable */}
         <div className="flex-1 overflow-y-auto p-6">
@@ -512,7 +841,7 @@ const AddShiftModal = ({
                   </div>
 
                   {/* Lista de trabajadores */}
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
                     {workers.map(worker => {
                       const isSelected = isWorkerSelected(turno.id, worker.id)
                       const isDisabled = isWorkerDisabled(turno.id, worker.id)
@@ -575,7 +904,7 @@ const AddShiftModal = ({
                       <div className="text-xs font-medium text-gray-700 mb-1">
                         Asignados ({assignments.length}):
                       </div>
-                      <div className="space-y-0.5 max-h-16 overflow-y-auto">
+                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
                         {assignments.map((workerId, idx) => {
                           const worker = getWorkerById(workerId)
                           const status = getWorkerShiftStatus(turno.id, workerId)

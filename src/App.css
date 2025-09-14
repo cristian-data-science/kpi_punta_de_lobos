@@ -112,9 +112,44 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* ELIMINACIÓN COMPLETA DE RINGS Y FOCUS EFECTOS PARA ARREGLAR BRILLO GLOBAL */
+  /* Reemplaza ALL focus rings con outline sólido para evitar el cambio de luminancia general */
+  :focus,
+  :focus-visible,
+  input:focus,
+  select:focus,
+  textarea:focus,
+  button:focus {
+    outline: 2px solid var(--ring) !important;
+    outline-offset: 1px !important;
+    box-shadow: none !important;
+    border-color: var(--ring) !important;
+  }
+  
+  /* Neutralizar completamente todos los rings de focus */
+  [class*='focus:ring'],
+  [class*='focus-visible:ring'],
+  .focus\:ring-2:focus,
+  .focus\:ring-blue-500:focus,
+  .focus-visible\:ring-2:focus-visible,
+  .focus-visible\:ring-blue-500:focus-visible,
+  .focus-visible\:ring-ring:focus-visible {
+    box-shadow: none !important;
+  }
+  
+  /* Eliminar transiciones que puedan causar variación de brillo */
+  * {
+    transition: none !important;
+  }
+  
+  /* Solo permitir transiciones específicas y controladas */
+  [data-slot='button'],
+  [data-slot='input'] {
+    transition: color .1s ease, background-color .1s ease !important;
   }
 }

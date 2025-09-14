@@ -105,7 +105,7 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
       const workerData = {
         ...formData,
         rut: normalizeRut(formData.rut), // Guardar RUT limpio
-        nombre: formData.nombre.trim(),
+        nombre: formData.nombre.trim().toUpperCase(), // Asegurar que se guarde en MAYÚSCULAS
         telefono: formData.telefono.trim()
       };
 
@@ -125,7 +125,7 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+  <div className="fixed inset-0 bg-black/25 backdrop-blur-[1px] flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
       <Card className="w-full max-w-md bg-white shadow-2xl border-0 animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
@@ -227,7 +227,7 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
               value={formData.contrato}
               onChange={(e) => handleInputChange('contrato', e.target.value)}
               disabled={isSaving}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               <option value="fijo">Fijo</option>
               <option value="eventual">Eventual</option>
@@ -243,7 +243,7 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
               value={formData.estado}
               onChange={(e) => handleInputChange('estado', e.target.value)}
               disabled={isSaving}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               <option value="activo">Activo</option>
               <option value="inactivo">Inactivo</option>

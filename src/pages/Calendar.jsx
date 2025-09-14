@@ -642,7 +642,7 @@ const Calendar = () => {
               <div className="text-2xl font-bold text-orange-600">
                 ${calendarConfig.shiftRates.sunday.toLocaleString()}
               </div>
-              <div className="text-sm text-gray-600">Domingo<br/>(Todos)</div>
+              <div className="text-sm text-gray-600">Domingo</div>
             </div>
           </div>
         </CardContent>

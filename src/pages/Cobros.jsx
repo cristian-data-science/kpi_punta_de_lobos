@@ -29,8 +29,10 @@ function Cobros() {
   const [lastUpdate, setLastUpdate] = useState(null)
   
   // Estados para filtros
-  const [viewMode, setViewMode] = useState('monthly') // 'weekly' o 'monthly'
-  const [selectedPeriod, setSelectedPeriod] = useState('')
+  const [viewMode, setViewMode] = useState('weekly') // Siempre empezar en semanal
+  const [selectedPeriod, setSelectedPeriod] = useState('') // Se inicializa con semana actual en useEffect
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear()) // Año actual
+  const [selectedWeek, setSelectedWeek] = useState(0) // Se inicializa con semana actual
   const [filteredTurnos, setFilteredTurnos] = useState([])
   
   // Estados para configuración de cobros
@@ -42,6 +44,23 @@ function Cobros() {
   useEffect(() => {
     loadCobroConfig().then(() => loadTurnosData())
   }, [])
+
+  // Establecer año y semana actual como inicial
+  useEffect(() => {
+    if (selectedWeek === 0) {
+      const currentDate = new Date()
+      const currentWeek = getWeekNumberForDate(currentDate)
+      setSelectedWeek(currentWeek)
+    }
+  }, [selectedWeek])
+
+  // Actualizar selectedPeriod cuando cambien año o semana
+  useEffect(() => {
+    if (selectedYear && selectedWeek > 0) {
+      const period = `${selectedYear}-W${selectedWeek.toString().padStart(2, '0')}`
+      setSelectedPeriod(period)
+    }
+  }, [selectedYear, selectedWeek])
 
   // Efecto para filtrar cuando cambie el período
   useEffect(() => {
@@ -154,11 +173,14 @@ function Cobros() {
       // Para modo semanal, esperamos format 'YYYY-Www' como '2025-W35'
       const [year, week] = period.split('-W')
       const targetWeek = parseInt(week)
+      const targetYear = parseInt(year)
       
       filtered = turnosData.filter(turno => {
         const turnoDate = new Date(turno.fecha)
         const turnoWeek = getWeekNumberForDate(turnoDate)
-        return turnoWeek === targetWeek
+        const turnoYear = turnoDate.getFullYear()
+        
+        return turnoWeek === targetWeek && turnoYear === targetYear
       })
     }
 
@@ -188,6 +210,22 @@ function Cobros() {
     return { startDate, endDate }
   }
 
+  // Formatear rango de fechas para mostrar en selector
+  const formatWeekRange = (year, week) => {
+    const { startDate, endDate } = getWeekDates(year, week)
+    
+    const formatOptions = { 
+      day: 'numeric', 
+      month: 'short',
+      timeZone: 'America/Santiago'
+    }
+    
+    const startFormatted = startDate.toLocaleDateString('es-CL', formatOptions)
+    const endFormatted = endDate.toLocaleDateString('es-CL', formatOptions)
+    
+    return `(${startFormatted} - ${endFormatted})`
+  }
+
   // Obtener períodos disponibles para filtro
   const getAvailablePeriods = () => {
     if (!turnosData.length) return []
@@ -209,6 +247,35 @@ function Cobros() {
     })
     
     return Array.from(periods).sort().reverse()
+  }
+
+  // Obtener años disponibles
+  const getAvailableYears = () => {
+    if (!turnosData.length) return []
+    
+    const years = new Set()
+    turnosData.forEach(turno => {
+      const date = new Date(turno.fecha)
+      years.add(date.getFullYear())
+    })
+    
+    return Array.from(years).sort().reverse()
+  }
+
+  // Obtener semanas disponibles para un año específico
+  const getAvailableWeeksForYear = (year) => {
+    if (!turnosData.length) return []
+    
+    const weeks = new Set()
+    turnosData.forEach(turno => {
+      const date = new Date(turno.fecha)
+      if (date.getFullYear() === year) {
+        const weekNumber = getWeekNumberForDate(date)
+        weeks.add(weekNumber)
+      }
+    })
+    
+    return Array.from(weeks).sort((a, b) => a - b)
   }
 
   // Obtener número de semana para una fecha específica (algoritmo ISO 8601 adaptado para turnos)
@@ -270,7 +337,8 @@ function Cobros() {
 
   // Obtener datos actuales (filtrados o todos)
   const getCurrentTurnosData = () => {
-    return selectedPeriod && filteredTurnos.length > 0 ? filteredTurnos : turnosData
+    // Usar datos filtrados cuando hay período seleccionado
+    return selectedPeriod && filteredTurnos.length >= 0 ? filteredTurnos : turnosData
   }
 
   // Calcular total de turnos
@@ -282,6 +350,32 @@ function Cobros() {
   const getTotalCobrar = () => {
     const currentData = getCurrentTurnosData()
     return currentData.reduce((total, turno) => total + (turno.cobro || 0), 0)
+  }
+
+  // Obtener cobro típico real (más común en los datos)
+  const getCobroTipico = () => {
+    const currentData = getCurrentTurnosData()
+    if (currentData.length === 0) return 0
+    
+    // Contar frecuencia de cada cobro
+    const cobros = {}
+    currentData.forEach(turno => {
+      const cobro = turno.cobro || 0
+      cobros[cobro] = (cobros[cobro] || 0) + 1
+    })
+    
+    // Encontrar el cobro más común
+    let maxCount = 0
+    let cobroMasComun = 0
+    
+    Object.entries(cobros).forEach(([cobro, count]) => {
+      if (count > maxCount) {
+        maxCount = count
+        cobroMasComun = parseInt(cobro)
+      }
+    })
+    
+    return cobroMasComun
   }
 
   // Calcular turnos por trabajador usando cobros guardados
@@ -365,7 +459,7 @@ function Cobros() {
       periodRow.alignment = { horizontal: 'left', vertical: 'middle' }
       periodRow.height = 22
       
-      const tarifaRow = summarySheet.addRow(['Tarifa por turno:', formatCurrency(tarifaCobro), '', ''])
+      const tarifaRow = summarySheet.addRow(['Cobro típico:', formatCurrency(getCobroTipico()), '', ''])
       tarifaRow.font = { size: 11, bold: true, color: { argb: '374151' } }
       tarifaRow.getCell(2).font = { size: 11, bold: true, color: { argb: '059669' } }
       tarifaRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F9FAFB' } }
@@ -423,7 +517,7 @@ function Cobros() {
       }
       resumenTrabajadorRow.height = 28
       
-      const headerRow = summarySheet.addRow(['Trabajador', 'Turnos', 'Total a Cobrar', 'Tarifa'])
+      const headerRow = summarySheet.addRow(['Trabajador', 'Turnos', 'Total a Cobrar', 'Tarifa por Turno'])
       headerRow.font = { size: 12, bold: true, color: { argb: 'FFFFFF' } }
       headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '374151' } }
       headerRow.alignment = { horizontal: 'left', vertical: 'middle' }
@@ -445,7 +539,7 @@ function Cobros() {
           trabajador.nombre,
           trabajador.turnos,
           formatCurrency(trabajador.totalCobro),
-          formatCurrency(tarifaCobro)
+          formatCurrency(trabajador.turnos > 0 ? trabajador.totalCobro / trabajador.turnos : 0) // Tarifa por turno
         ])
         
         // Colores alternados profesionales
@@ -533,7 +627,7 @@ function Cobros() {
             formatDate(turno.fecha),
             turno.conductorNombre,
             turno.turno,
-            formatCurrency(tarifaCobro)
+            formatCurrency(turno.cobro || 0) // ✅ USAR COBRO GUARDADO
           ])
           
           // Colores alternados elegantes
@@ -650,7 +744,7 @@ function Cobros() {
           <div>
             <h3 className="text-blue-800 font-semibold mb-1">Solo turnos completados generan cobros</h3>
             <p className="text-blue-700 text-sm">
-              Tarifa fija de {formatCurrency(tarifaCobro)} por turno completado
+              Los cobros se basan en valores guardados cuando se completó cada turno
               {supabaseStats && (
                 <span className="font-medium">
                   {' '}• Total disponible: {supabaseStats.turnosCompletados || 0} turnos completados
@@ -726,36 +820,41 @@ function Cobros() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Selector de modo de vista */}
+            {/* Selector de año */}
             <div>
-              <Label>Tipo de período</Label>
+              <Label>Año</Label>
               <select
-                value={viewMode}
+                value={selectedYear}
                 onChange={(e) => {
-                  setViewMode(e.target.value)
-                  setSelectedPeriod('')
+                  const newYear = parseInt(e.target.value)
+                  setSelectedYear(newYear)
+                  // Si la semana actual no existe en el nuevo año, seleccionar la primera disponible
+                  const availableWeeks = getAvailableWeeksForYear(newYear)
+                  if (availableWeeks.length > 0 && !availableWeeks.includes(selectedWeek)) {
+                    setSelectedWeek(availableWeeks[0])
+                  }
                 }}
                 className="w-full mt-2 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="monthly">Mensual</option>
-                <option value="weekly">Semanal</option>
+                {getAvailableYears().map(year => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {/* Selector de período */}
+            {/* Selector de semana */}
             <div>
-              <Label>
-                {viewMode === 'monthly' ? 'Mes' : 'Semana'}
-              </Label>
+              <Label>Semana</Label>
               <select
-                value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value)}
+                value={selectedWeek}
+                onChange={(e) => setSelectedWeek(parseInt(e.target.value))}
                 className="w-full mt-2 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="">Todos los períodos</option>
-                {getAvailablePeriods().map(period => (
-                  <option key={period} value={period}>
-                    {formatPeriodLabel(period)}
+                {getAvailableWeeksForYear(selectedYear).map(week => (
+                  <option key={week} value={week}>
+                    Semana {week} {formatWeekRange(selectedYear, week)}
                   </option>
                 ))}
               </select>
@@ -764,7 +863,8 @@ function Cobros() {
             {/* Información actual */}
             <div className="flex items-end">
               <div className="text-sm text-gray-600">
-                <div>Tarifa actual: <span className="font-semibold text-blue-600">{formatCurrency(tarifaCobro)}</span></div>
+                <div>Período: <span className="font-semibold text-blue-600">Semana {selectedWeek} de {selectedYear} {formatWeekRange(selectedYear, selectedWeek)}</span></div>
+                <div>Tarifa para nuevos turnos: <span className="font-semibold text-blue-600">{formatCurrency(tarifaCobro)}</span></div>
                 <div>Última actualización: {lastUpdate?.toLocaleTimeString('es-CL')}</div>
               </div>
             </div>
@@ -814,8 +914,8 @@ function Cobros() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Tarifa por Turno</p>
-                <p className="text-2xl font-bold text-orange-600">{formatCurrency(tarifaCobro)}</p>
+                <p className="text-sm font-medium text-gray-600">Cobro turno semana</p>
+                <p className="text-2xl font-bold text-orange-600">{formatCurrency(getCobroTipico())}</p>
               </div>
               <Calculator className="h-8 w-8 text-orange-600" />
             </div>
@@ -850,7 +950,7 @@ function Cobros() {
                     <th className="text-left py-3 px-4 font-semibold text-gray-700">Trabajador</th>
                     <th className="text-center py-3 px-4 font-semibold text-gray-700">Turnos</th>
                     <th className="text-right py-3 px-4 font-semibold text-gray-700">Total a Cobrar</th>
-                    <th className="text-right py-3 px-4 font-semibold text-gray-700">Tarifa</th>
+                    <th className="text-right py-3 px-4 font-semibold text-gray-700">Tarifa por Turno</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -873,7 +973,7 @@ function Cobros() {
                         {formatCurrency(trabajador.totalCobro)}
                       </td>
                       <td className="py-3 px-4 text-right text-gray-600">
-                        {formatCurrency(tarifaCobro)}
+                        {formatCurrency(trabajador.turnos > 0 ? trabajador.totalCobro / trabajador.turnos : 0)}
                       </td>
                     </tr>
                   ))}

@@ -280,8 +280,25 @@
 - [x] ✅ Actualización de arquitectura de componentes
 - [x] ✅ Nuevos patrones de desarrollo y configuración
 
+### 19. Visualización de Tarifas Pagadas en Turnos
+**Estado**: ✅ **COMPLETADO**  
+**Fecha**: 13 de septiembre de 2025  
+**Prioridad**: Media  
+
+**Funcionalidades Implementadas:**
+- [x] ✅ Nueva función `getWeekCompletedTariffs()` para extraer tarifas pagadas de turnos completados
+- [x] ✅ Sección visual que solo aparece cuando hay turnos completados en la semana
+- [x] ✅ Grid de 3 columnas mostrando tarifas por tipo de turno (1°, 2°, 3°)
+- [x] ✅ Valores extraídos directamente del campo `pago` de la tabla turnos
+- [x] ✅ Manejo de múltiples tarifas por tipo de turno (tarifas únicas)
+- [x] ✅ Contador de turnos completados por tipo
+- [x] ✅ Nota explicativa sobre que los valores son fijos e históricos
+- [x] ✅ Diseño profesional con iconos y colores distintivos (azul/verde)
+- [x] ✅ Integración perfecta con el flujo existente sin modificar funcionalidades
+
 ---
 
 ### **Historial de Cambios:**
 - **Versión 1.0**: Creación inicial del roadmap de implementación
 - **Versión 1.1**: Actualización con módulos de Turnos y Login Security completados (53.3% progreso total)
+- **Versión 1.2**: Agregado módulo de Visualización de Tarifas Pagadas en Turnos (60.0% progreso total)

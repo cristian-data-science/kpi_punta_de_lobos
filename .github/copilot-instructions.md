@@ -349,21 +349,120 @@ git push origin main  # Triggers auto-deployment (when configured)
 - Sourcemaps disabled for production builds
 - Terser minification with size warnings for chunks >500KB
 
-### Critical Constructor Fix
-**⚠️ IMPORTANT**: MasterDataService constructor order is critical:
-```javascript
-// CORRECT (prevents forEach error on fresh browser load)
-constructor() {
-  this.observers = [] // Initialize FIRST
-  this.initializeDefaultData() // Then initialize data
-}
+## Sistema Financiero Histórico (IMPLEMENTED)
 
-// INCORRECT (causes "Cannot read properties of undefined" error)
-constructor() {
-  this.initializeDefaultData() // ❌ This can call notifyObservers()
-  this.observers = [] // ❌ Too late, observers undefined
+### Arquitectura de Valores Guardados
+- **Principio Fundamental**: Los pagos/cobros usan valores históricos guardados en BD, NO recálculos
+- **Campos Críticos**: `turnos.pago` y `turnos.cobro` - valores inmutables una vez guardados
+- **Integridad Financiera**: Cambios futuros de tarifas NO afectan turnos completados anteriormente
+- **Servicios Especializados**: `paymentsSupabaseService.js` y `cobrosSupabaseService.js` optimizados para valores históricos
+
+### Sistema de Filtros Funcionales
+- **Pagos**: Filtros año/mes con inicialización automática período actual
+- **Cobros**: Filtros año/semana con rangos fechas visibles ("Semana 37 (9 sept - 15 sept)")
+- **Estados Separados**: `selectedYear`, `selectedMonth`/`selectedWeek` para navegación independiente
+- **Lógica Inteligente**: Datos filtrados vs datos totales según selección usuario
+
+### Carga Inteligente de Datos (PERFORMANCE CRÍTICO)
+- **Cache por Mes**: No recarga meses ya visitados, optimización memory/network
+- **Paginación Automática**: Supera limitación 1000 registros Supabase, carga 2,205+ turnos
+- **Detección Multi-Mes**: Semanas que cruzan meses (28jul-3ago) cargan ambos automáticamente
+- **Refresco Inteligente**: Post-CRUD actualización automática sin refresh manual
+
+## Sistema de Reglas de Turnos Configurables (ADVANCED BUSINESS LOGIC)
+
+### Modal de Configuración de Reglas
+- **Ubicación**: Componente integrado en Turnos.jsx con botón "Configurar Reglas"
+- **Reglas de Solapamiento**: Control granular de combinaciones permitidas (1º+2º, 1º+3º, 2º+3º)
+- **Reglas Día Siguiente**: "Si hace 3º turno hoy, mañana solo 2º turno" - lógica empresarial
+- **Límites por Turno**: Cantidad máxima trabajadores por tipo turno (primer_turno, segundo_turno, tercer_turno)
+- **Persistencia**: Configuración guardada en localStorage con key `transapp_turnos_rules`
+
+### Validación en Tiempo Real
+- **Eliminación Validación Hardcodeada**: Sistema anterior reemplazado por configuración dinámica
+- **Alertas Visuales**: Feedback inmediato durante asignación trabajadores
+- **Prevención Conflictos**: Detección automática violaciones reglas antes de guardar
+- **UX Inteligente**: Workers bloqueados con explicación clara del motivo
+
+### Arquitectura de Reglas
+```javascript
+const rulesConfig = {
+  solapamiento: {
+    'primer_segundo': true,    // Permite 1º + 2º mismo día
+    'primer_tercero': false,   // Prohíbe 1º + 3º mismo día  
+    'segundo_tercero': true    // Permite 2º + 3º mismo día
+  },
+  diaSiguiente: {
+    'tercer_turno': ['segundo_turno']  // Si 3º hoy → solo 2º mañana
+  },
+  limites: {
+    'primer_turno': 3,   // Máx 3 trabajadores en 1º turno
+    'segundo_turno': 4,  // Máx 4 trabajadores en 2º turno
+    'tercer_turno': 2    // Máx 2 trabajadores en 3º turno
+  }
 }
 ```
+
+## Visualización de Tarifas Pagadas (DYNAMIC UI)
+
+### Sistema de Tarifas Dinámico
+- **Aparición Condicional**: Solo visible cuando hay turnos completados en semana actual
+- **Valores Históricos**: Muestra tarifas reales del campo `pago` (inmutables)
+- **Categorización Inteligente**: Agrupa por tipo turno y día especial automáticamente
+- **Diseño Minimalista**: Cards horizontales con información concisa y profesional
+
+### Implementación Técnica
+- **Función `getTarifasPagadas()`**: Procesa turnos completados y extrae tarifas únicas
+- **Lógica de Categorías**: Clasifica automáticamente (normales, sábados, domingos, feriados)
+- **Update Automático**: Se actualiza en tiempo real con cambios de semana/datos
+
+## Sección de Tarifas Centralizada (NEW MODULE)
+
+### Arquitectura de Gestión Unificada
+- **Ubicación**: `src/pages/Tarifas.jsx` - Sección independiente reemplaza Vehicles
+- **Gestión Dual**: Tarifas de Calendario (5 tipos) + Tarifa de Cobros (1 tipo)
+- **Persistencia**: Tabla `shift_rates` Supabase con `rate_name` como clave única
+- **Patrón Upsert**: Actualización/inserción inteligente sin conflictos
+
+### Interfaz Especializada
+- **Modales Separados**: Configuración Calendario vs Configuración Cobros
+- **Validación Numérica**: Inputs con steps apropiados y feedback visual
+- **Estados Profesionales**: Loading, éxito, error con manejo robusto
+- **Navegación Actualizada**: Sidebar con ícono DollarSign y ruta `/tarifas`
+
+### Integración Sistema Existente
+- **Compatibilidad Total**: Usa mismas tablas BD (`shift_rates`) sin ruptura
+- **Formato Consistente**: Compatible con servicios existentes Calendario/Cobros
+- **Fallback Robusto**: Manejo errores con valores por defecto apropiados
+
+## Data Architecture Enhancements (PERFORMANCE & SCALABILITY)
+
+### Paginación Inteligente de Turnos
+- **Problema Resuelto**: Limitación 1000 registros Supabase
+- **Implementación**: Loop automático con `range()` para cargar TODOS los turnos
+- **Resultado**: 2,205+ turnos históricos (mayo-octubre 2025) completamente accesibles
+- **Performance**: Carga inicial optimizada, cache inteligente post-carga
+
+### Cache System por Demanda
+```javascript
+// Ejemplo de implementación cache inteligente
+const monthCache = new Map()
+const loadTurnosForMonth = async (year, month) => {
+  const cacheKey = `${year}-${month}`
+  if (monthCache.has(cacheKey)) {
+    return monthCache.get(cacheKey) // ⚡ Cache hit
+  }
+  
+  const data = await supabaseService.getTurnosMonth(year, month)
+  monthCache.set(cacheKey, data) // 💾 Cache store
+  return data
+}
+```
+
+### Detección Automática Multi-Mes
+- **Semanas Cruzadas**: Detecta automáticamente semanas que cruzan meses (ej: 28jul-3ago)
+- **Carga Inteligente**: Fetch automático de ambos meses sin intervención usuario
+- **UX Seamless**: Usuario no percibe complejidad técnica, datos siempre completos
 
 ### Data Initialization
 **Current State - Supabase Production Data**:
@@ -480,6 +579,65 @@ const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
 - Saturday 3rd shift pays $27,500
 - Weekday 3rd shift pays $22,500
 - All other shifts pay $20,000
+
+## Development Patterns Actualizados (CRITICAL)
+
+### Uso de Valores Históricos (CRITICAL PATTERN)
+```javascript
+// ✅ CORRECTO: Usar valores históricos guardados
+const totalPagos = turnos.reduce((sum, turno) => sum + (turno.pago || 0), 0)
+const totalCobros = turnos.reduce((sum, turno) => sum + (turno.cobro || 0), 0)
+
+// ❌ INCORRECTO: Recalcular usando tarifas actuales
+const totalPagos = turnos.reduce((sum, turno) => {
+  const tarifa = getCurrentRate(turno.tipo) // NO hacer esto
+  return sum + tarifa
+}, 0)
+```
+
+### Patrón de Filtros Separados
+- **Estados Independientes**: `selectedYear` + `selectedMonth/Week` por separado
+- **Sincronización**: useEffect para combinar en `selectedPeriod` cuando sea necesario
+- **Inicialización**: Siempre comenzar con período actual (año y mes/semana actuales)
+- **Navegación**: Cambio independiente de año no afecta mes/semana si existe en nuevo año
+
+### Sistema de Reglas Configurables
+- **Eliminación Hardcode**: Nunca validaciones fijas en código, usar configuración dinámica
+- **Persistencia localStorage**: Configuraciones de reglas con prefix `transapp_` apropiado
+- **Validación Tiempo Real**: Evaluar reglas durante asignación, no después
+- **UX Explicativo**: Siempre explicar por qué algo está bloqueado/permitido
+
+### Cache Inteligente por Demanda
+```javascript
+// Patrón de cache mensual
+const monthCache = new Map()
+const loadIfNotCached = async (year, month) => {
+  const key = `${year}-${month}`
+  if (!monthCache.has(key)) {
+    const data = await fetchDataFromSupabase(year, month)
+    monthCache.set(key, data)
+  }
+  return monthCache.get(key)
+}
+```
+
+### Enhanced UI/UX Patterns (PROFESSIONAL)
+
+#### Modales Profesionales Optimizados
+- **Z-index Correcto**: Evitar conflictos superposición con otros elementos
+- **Área Selección Ampliada**: Más trabajadores visibles sin scroll excesivo
+- **Posicionamiento Inteligente**: Centrado responsive en todas las resoluciones
+- **Estados de Carga**: Feedback visual inmediato en todas las operaciones
+
+#### Headers Contextuales
+- **Información Relevante**: Período actual, tarifas aplicables, última actualización
+- **Botones Accesibles**: Configuración, refresh, export siempre visibles
+- **Espaciado Profesional**: Layout equilibrado sin sobrecarga visual
+
+#### Sistema de Estados Sincronizado
+- **Actualización Automática**: BD ↔ UI sin refreshes manuales
+- **Feedback Inmediato**: Loading, success, error states bien definidos
+- **Manejo Errores**: Fallbacks graceful con mensajes usuarios apropiados
 
 ## Project Organization & Structure
 

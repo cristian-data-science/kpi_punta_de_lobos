@@ -5,7 +5,7 @@ import {
   Upload, 
   Users, 
   Clock,
-  Truck, 
+  DollarSign as TarifasIcon, 
   Receipt,
   DollarSign, 
   Calendar,
@@ -84,10 +84,10 @@ const Sidebar = ({ isOpen, onClose }) => {
       description: 'Gestión de turnos'
     },
     { 
-      path: '/vehicles', 
-      icon: Truck, 
-      label: 'Vehículos',
-      description: 'Flota de camiones'
+      path: '/tarifas', 
+      icon: TarifasIcon, 
+      label: 'Tarifas',
+      description: 'Configuración de tarifas'
     },
     { 
       path: '/cobros', 
@@ -126,17 +126,17 @@ const Sidebar = ({ isOpen, onClose }) => {
       {/* Mobile overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-black/20 backdrop-blur-[1px] z-40 lg:hidden transition-opacity duration-150"
           onClick={onClose}
         />
       )}
       
       {/* Sidebar */}
       <aside className={`
-        fixed top-0 left-0 z-50 h-full w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out
-        lg:translate-x-0 lg:static lg:z-auto
+        fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-gray-100 transform transition-transform duration-300 ease-in-out
+        lg:translate-x-0 lg:static lg:z-0 lg:border-r-0
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
+      `} style={{ isolation: 'isolate' }}>
         <div className="flex items-center justify-between p-4 border-b border-gray-200 lg:hidden">
           <h2 className="text-lg font-semibold text-gray-900">Menú</h2>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -153,10 +153,10 @@ const Sidebar = ({ isOpen, onClose }) => {
                 to={item.path}
                 onClick={() => onClose()}
                 className={({ isActive }) => `
-                  flex items-center space-x-3 p-3 rounded-lg transition-colors duration-200
+                  flex items-center space-x-3 p-3 rounded-lg transition-none
                   ${isActive 
                     ? 'bg-orange-50 text-orange-700 border-l-4 border-orange-600' 
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-orange-600'
+                    : 'text-gray-700'
                   }
                 `}
               >

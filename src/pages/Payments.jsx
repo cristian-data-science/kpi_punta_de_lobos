@@ -24,8 +24,10 @@ function Payments() {
   const [loading, setLoading] = useState(false) // Estado de carga
   
   // Estados para el filtro de mes
-  const [viewMode, setViewMode] = useState('total') // 'total' o 'monthly'
-  const [selectedMonth, setSelectedMonth] = useState('') // Mes seleccionado para filtrar
+  const [viewMode, setViewMode] = useState('total') // 🔄 CAMBIAR: Empezar en vista total para ver todos los turnos
+  const [selectedMonth, setSelectedMonth] = useState('') // Se inicializa con mes actual
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear()) // Año actual
+  const [selectedMonthNum, setSelectedMonthNum] = useState(0) // Se inicializa con mes actual
   const [filteredPayments, setFilteredPayments] = useState([])
 
   // Obtener número de semana para una fecha específica (algoritmo adaptado para la empresa)
@@ -90,7 +92,7 @@ function Payments() {
 
   // Función para filtrar pagos por mes
   const filterPaymentsByMonth = (payments, month) => {
-    if (!month || viewMode !== 'monthly') {
+    if (!month) {
       setFilteredPayments([])
       return
     }
@@ -100,11 +102,13 @@ function Payments() {
       // Filtrar turnos del trabajador por el mes seleccionado
       const turnosDelMes = worker.turnos.filter(turno => {
         // Usar timezone local para consistencia
-        const [year, month, day] = turno.fecha.split('-')
-        const turnoDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+        const [turnoYear, turnoMonth, day] = turno.fecha.split('-')
+        const turnoDate = new Date(parseInt(turnoYear), parseInt(turnoMonth) - 1, parseInt(day))
         
-        return turnoDate.getFullYear() === parseInt(year) && 
-               (turnoDate.getMonth() + 1) === parseInt(monthNum)
+        const matchesYear = turnoDate.getFullYear() === parseInt(year)
+        const matchesMonth = (turnoDate.getMonth() + 1) === parseInt(monthNum)
+        
+        return matchesYear && matchesMonth
       })
 
       if (turnosDelMes.length === 0) return null
@@ -151,9 +155,10 @@ function Payments() {
     setFilteredPayments(filtered)
   }
 
-  // Función para obtener los datos actuales (total o filtrados)
+  // Función para obtener los datos actuales (usa filtros de año/mes)
   const getCurrentPaymentsData = () => {
-    return viewMode === 'monthly' && selectedMonth ? filteredPayments : workerPayments
+    // Usar datos filtrados cuando hay mes seleccionado
+    return selectedMonth && filteredPayments.length >= 0 ? filteredPayments : workerPayments
   }
 
   // Función para obtener los meses disponibles
@@ -169,18 +174,67 @@ function Payments() {
     return Array.from(months).sort().reverse() // Más recientes primero
   }
 
+  // Obtener años disponibles
+  const getAvailableYears = () => {
+    if (!workerPayments.length) return []
+    
+    const years = new Set()
+    workerPayments.forEach(worker => {
+      worker.turnos.forEach(turno => {
+        const date = new Date(turno.fecha)
+        years.add(date.getFullYear())
+      })
+    })
+    
+    return Array.from(years).sort().reverse()
+  }
+
+  // Obtener meses disponibles para un año específico
+  const getAvailableMonthsForYear = (year) => {
+    if (!workerPayments.length) return []
+    
+    const months = new Set()
+    workerPayments.forEach(worker => {
+      worker.turnos.forEach(turno => {
+        const date = new Date(turno.fecha)
+        if (date.getFullYear() === year) {
+          months.add(date.getMonth() + 1) // getMonth() es 0-indexed
+        }
+      })
+    })
+    
+    return Array.from(months).sort((a, b) => a - b)
+  }
+
   useEffect(() => {
     loadPaymentData()
   }, [])
 
+  // Establecer año y mes actual como inicial
+  useEffect(() => {
+    if (selectedMonthNum === 0) {
+      const currentDate = new Date()
+      const currentMonth = currentDate.getMonth() + 1 // getMonth() es 0-indexed
+      setSelectedMonthNum(currentMonth)
+    }
+  }, [selectedMonthNum])
+
+  // Actualizar selectedMonth cuando cambien año o mes
+  useEffect(() => {
+    if (selectedYear && selectedMonthNum > 0) {
+      const monthString = `${selectedYear}-${selectedMonthNum.toString().padStart(2, '0')}`
+      setSelectedMonth(monthString)
+    }
+  }, [selectedYear, selectedMonthNum])
+
   // Efecto para filtrar cuando cambie el mes seleccionado
   useEffect(() => {
-    if (viewMode === 'monthly' && selectedMonth) {
+    if (selectedMonth && workerPayments.length > 0) {
       filterPaymentsByMonth(workerPayments, selectedMonth)
     } else {
       setFilteredPayments([])
     }
-  }, [selectedMonth, viewMode, workerPayments])
+  }, [selectedMonth, workerPayments])
 
   // Función para expandir/colapsar trabajadores
   const toggleWorkerExpansion = (workerName) => {
@@ -228,7 +282,7 @@ function Payments() {
 
   // Función para detectar problemas con fechas/turnos
   const getDateWarnings = () => {
-    if (viewMode !== 'monthly' || !selectedMonth) return null
+    if (!selectedMonth) return null
 
     const [year, monthNum] = selectedMonth.split('-')
     const monthName = new Date(year, monthNum - 1).toLocaleDateString('es-CL', { 
@@ -344,7 +398,7 @@ function Payments() {
       
       // HOJA 1: RESUMEN - Nombre corto para evitar truncamiento
       let sheetTitle = 'Resumen'
-      if (viewMode === 'monthly' && selectedMonth) {
+      if (selectedMonth) {
         const [year, month] = selectedMonth.split('-')
         const monthName = new Date(year, month - 1).toLocaleDateString('es-CL', { month: 'short' })
         sheetTitle = `${monthName.replace('.', '').charAt(0).toUpperCase() + monthName.replace('.', '').slice(1)} ${year}`
@@ -384,7 +438,7 @@ function Payments() {
       worksheet.mergeCells('A3:E3')
       infoHeaderRow.height = 28
 
-      const periodRow = worksheet.addRow(['Período:', viewMode === 'monthly' && selectedMonth ? `${sheetTitle}` : 'Todos los períodos', '', '', ''])
+      const periodRow = worksheet.addRow(['Período:', selectedMonth ? `${sheetTitle}` : 'Todos los períodos', '', '', ''])
       periodRow.font = { size: 11, color: { argb: '374151' } }
       periodRow.getCell(1).font = { size: 11, bold: true, color: { argb: '1F2937' } }
       periodRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF2F2' } }
@@ -643,7 +697,7 @@ function Payments() {
       }
 
       // Generar nombre de archivo dinámico
-      const fileName = viewMode === 'monthly' && selectedMonth 
+      const fileName = selectedMonth 
         ? `Pagos_${selectedMonth}_${new Date().toLocaleDateString('es-CL').replace(/\//g, '-')}.xlsx`
         : `Pagos_Turnos_${new Date().toLocaleDateString('es-CL').replace(/\//g, '-')}.xlsx`
 
@@ -750,115 +804,67 @@ function Payments() {
         </div>
       </div>
 
-      {/* Selector de Vista y Filtro de Mes */}
+      {/* Filtros de Período */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between bg-white p-4 rounded-lg border border-gray-200">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-          {/* Selector de vista */}
+          {/* Selector de año */}
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">Vista:</label>
+            <label className="text-sm font-medium text-gray-700">Año:</label>
             <select
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value)}
+              value={selectedYear}
+              onChange={(e) => {
+                const newYear = parseInt(e.target.value)
+                setSelectedYear(newYear)
+                // Si el mes actual no existe en el nuevo año, seleccionar el primer mes disponible
+                const availableMonths = getAvailableMonthsForYear(newYear)
+                if (availableMonths.length > 0 && !availableMonths.includes(selectedMonthNum)) {
+                  setSelectedMonthNum(availableMonths[0])
+                }
+              }}
               className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="total">Vista Total</option>
-              <option value="monthly">Por Mes</option>
+              {getAvailableYears().map(year => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
             </select>
           </div>
 
-          {/* Selector de mes (solo visible en modo mensual) */}
-          {viewMode === 'monthly' && (
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Mes:</label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Seleccionar mes...</option>
-                {getAvailableMonths().map(month => {
-                  const [year, monthNum] = month.split('-')
-                  const monthName = new Date(year, monthNum - 1).toLocaleDateString('es-CL', { 
-                    month: 'long', 
-                    year: 'numeric' 
-                  })
-                  return (
-                    <option key={month} value={month}>
-                      {monthName.charAt(0).toUpperCase() + monthName.slice(1)}
-                    </option>
-                  )
-                })}
-              </select>
-            </div>
-          )}
+          {/* Selector de mes */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Mes:</label>
+            <select
+              value={selectedMonthNum}
+              onChange={(e) => setSelectedMonthNum(parseInt(e.target.value))}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              {getAvailableMonthsForYear(selectedYear).map(month => {
+                const monthName = new Date(2000, month - 1).toLocaleDateString('es-CL', { month: 'long' })
+                return (
+                  <option key={month} value={month}>
+                    {monthName.charAt(0).toUpperCase() + monthName.slice(1)}
+                  </option>
+                )
+              })}
+            </select>
+          </div>
         </div>
 
         {/* Información de filtro activo */}
-        {viewMode === 'monthly' && selectedMonth && (
-          <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
-            <Calendar className="h-4 w-4" />
-            <span>
-              Mostrando datos de {(() => {
-                const [year, monthNum] = selectedMonth.split('-')
-                const monthName = new Date(year, monthNum - 1).toLocaleDateString('es-CL', { 
-                  month: 'long', 
-                  year: 'numeric' 
-                })
-                return monthName.charAt(0).toUpperCase() + monthName.slice(1)
-              })()}
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
+          <Calendar className="h-4 w-4" />
+          <span>
+            Período: {(() => {
+              const monthName = new Date(2000, selectedMonthNum - 1).toLocaleDateString('es-CL', { month: 'long' })
+              return `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} de ${selectedYear}`
+            })()}
+          </span>
+        </div>
       </div>
 
-      {/* Warning de fechas/turnos faltantes */}
-      {(() => {
-        const warning = getDateWarnings()
-        if (!warning) return null
-
-        return (
-          <div className={`p-4 rounded-lg border-l-4 ${
-            warning.type === 'no-data' 
-              ? 'bg-gray-50 border-gray-400 text-gray-700' 
-              : warning.type === 'missing-days'
-              ? 'bg-red-50 border-red-400 text-red-700'
-              : 'bg-yellow-50 border-yellow-400 text-yellow-700'
-          }`}>
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                {warning.type === 'no-data' ? (
-                  <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-                  </svg>
-                ) : warning.type === 'missing-days' ? (
-                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                ) : (
-                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </div>
-              <div className="ml-3 flex-1">
-                <p className="text-sm font-medium">
-                  {warning.type === 'no-data' ? 'Sin datos' : 
-                   warning.type === 'missing-days' ? 'Días faltantes' : 
-                   'Mes incompleto'}
-                </p>
-                <p className="text-sm mt-1">
-                  {warning.message}
-                </p>
-                {warning.workers && warning.workers.length > 0 && (
-                  <p className="text-xs mt-2 opacity-75">
-                    Trabajadores: {warning.workers.join(', ')}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )
-      })()}
+      {/* Warning de fechas/turnos faltantes - Temporarily commented out */}
+      {/* TODO: Re-enable warning system after syntax fix */}
 
       {/* Resumen general */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

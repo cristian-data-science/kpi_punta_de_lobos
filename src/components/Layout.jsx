@@ -11,7 +11,7 @@ const Layout = () => {
       <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
       <div className="flex">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6" style={{ isolation: 'isolate' }}>
           <Outlet />
         </main>
       </div>

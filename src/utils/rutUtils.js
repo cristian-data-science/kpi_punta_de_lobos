@@ -83,13 +83,21 @@ export const formatRut = (rut) => {
 };
 
 /**
- * Normaliza un RUT para almacenamiento (formato limpio)
+ * Normaliza un RUT para almacenamiento (formato con guión, sin puntos)
  * @param {string} rut - RUT a normalizar
- * @returns {string} RUT normalizado (sin puntos ni guiones)
+ * @returns {string} RUT normalizado (formato XXXXXXXX-X)
  */
 export const normalizeRut = (rut) => {
   const cleanedRut = cleanRut(rut);
-  return validateRut(cleanedRut) ? cleanedRut : '';
+  
+  if (!validateRut(cleanedRut)) return '';
+  
+  // Separar número y dígito verificador
+  const rutNumber = cleanedRut.slice(0, -1);
+  const verifierDigit = cleanedRut.slice(-1);
+  
+  // Devolver con guión (formato estándar para BD)
+  return `${rutNumber}-${verifierDigit}`;
 };
 
 /**
