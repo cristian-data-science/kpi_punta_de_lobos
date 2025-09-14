@@ -169,26 +169,53 @@ const Dashboard = () => {
   }
 
   /* 
-   * 📊 QUERY 2: TURNOS GENERALES
+   * 📊 QUERY 2: TURNOS GENERALES (CON PAGINACIÓN COMPLETA)
    * SELECT id, fecha, estado, turno_tipo, pago, cobro FROM turnos
    * Propósito: Estadísticas generales de turnos y turnos del día
+   * SOLUCIÓN: Implementar paginación para obtener TODOS los registros (>1000)
    */
   const loadShiftsData = async () => {
-    // Obtener todos los turnos
-    const { data, error } = await supabase
-      .from('turnos')
-      .select('id, fecha, estado, turno_tipo, pago, cobro')
+    console.log('📊 Cargando TODOS los turnos con paginación...') // Debug
     
-    if (error) throw error
+    let allData = []
+    let start = 0
+    const pageSize = 1000
+    let hasMore = true
+    
+    // Paginación para obtener TODOS los registros
+    while (hasMore) {
+      console.log(`📄 Cargando página ${Math.floor(start/pageSize) + 1} (desde registro ${start})`) // Debug
+      
+      const { data, error } = await supabase
+        .from('turnos')
+        .select('id, fecha, estado, turno_tipo, pago, cobro')
+        .range(start, start + pageSize - 1)
+      
+      if (error) throw error
+      
+      if (data && data.length > 0) {
+        allData = [...allData, ...data]
+        start += pageSize
+        hasMore = data.length === pageSize // Si no devuelve página completa, no hay más
+        
+        console.log(`✅ Página cargada: ${data.length} registros, Total acumulado: ${allData.length}`) // Debug
+      } else {
+        hasMore = false
+      }
+    }
+    
+    console.log(`🎯 TOTAL FINAL DE TURNOS CARGADOS: ${allData.length}`) // Debug crítico
 
     const today = new Date().toISOString().split('T')[0]
-    const completed = data?.filter(s => s.estado === 'completado').length || 0
-    const programmed = data?.filter(s => s.estado === 'programado').length || 0
-    const cancelled = data?.filter(s => s.estado === 'cancelado').length || 0
-    const todayShifts = data?.filter(s => s.fecha === today).length || 0
+    const completed = allData?.filter(s => s.estado === 'completado').length || 0
+    const programmed = allData?.filter(s => s.estado === 'programado').length || 0
+    const cancelled = allData?.filter(s => s.estado === 'cancelado').length || 0
+    const todayShifts = allData?.filter(s => s.fecha === today).length || 0
+
+    console.log(`📈 Estadísticas calculadas: Total=${allData.length}, Completados=${completed}, Programados=${programmed}, Cancelados=${cancelled}`) // Debug
 
     return {
-      total: data?.length || 0,
+      total: allData?.length || 0,
       completed,
       programmed,
       cancelled,
@@ -247,18 +274,49 @@ const Dashboard = () => {
     
     console.log('💰 Filtro fecha aplicado:', { financialRange, filterDate }) // Debug crítico
     
-    const { data, error } = await query
+    // ✅ SOLUCIÓN: Implementar paginación para datos financieros
+    let allFinancialData = []
+    let start = 0
+    const pageSize = 1000
+    let hasMore = true
+    
+    while (hasMore) {
+      console.log(`💰 Cargando página financiera ${Math.floor(start/pageSize) + 1} (desde ${start})`) // Debug
+      
+      let pageQuery = supabase
+        .from('turnos')
+        .select('pago, cobro, fecha')
+        .eq('estado', 'completado')
+        .range(start, start + pageSize - 1)
+      
+      // Aplicar filtros de fecha si existen
+      if (filterDate) {
+        pageQuery = pageQuery.gte('fecha', filterDate)
+      }
+      
+      const { data: pageData, error } = await pageQuery
+      
+      if (error) throw error
+      
+      if (pageData && pageData.length > 0) {
+        allFinancialData = [...allFinancialData, ...pageData]
+        start += pageSize
+        hasMore = pageData.length === pageSize
+        
+        console.log(`💰 Página financiera cargada: ${pageData.length} registros, Total: ${allFinancialData.length}`) // Debug
+      } else {
+        hasMore = false
+      }
+    }
 
-    if (error) throw error
+    console.log('💰 TOTAL REGISTROS FINANCIEROS CARGADOS:', allFinancialData.length) // Debug crítico
 
-    console.log('💰 Registros encontrados DESPUÉS del filtro:', data?.length) // Debug crítico
-
-    const totalCosts = data?.reduce((sum, s) => sum + (s.pago || 0), 0) || 0
-    const totalIncome = data?.reduce((sum, s) => sum + (s.cobro || 0), 0) || 0
+    const totalCosts = allFinancialData?.reduce((sum, s) => sum + (s.pago || 0), 0) || 0
+    const totalIncome = allFinancialData?.reduce((sum, s) => sum + (s.cobro || 0), 0) || 0
     const margin = totalIncome - totalCosts
     const marginPercent = totalIncome > 0 ? ((margin / totalIncome) * 100) : 0
 
-    console.log('💰 Datos financieros cargados:', { totalIncome, totalCosts, margin, registros: data?.length }) // Debug
+    console.log('💰 Datos financieros calculados:', { totalIncome, totalCosts, margin, registros: allFinancialData?.length }) // Debug
 
     return {
       totalIncome,
@@ -302,20 +360,41 @@ const Dashboard = () => {
     
     console.log('📈 Filtro fecha aplicado:', { trendsRange, filterDate }) // Debug crítico
     
-    const { data, error } = await supabase
-      .from('turnos')
-      .select('fecha, estado, pago, cobro')
-      .gte('fecha', filterDate)
-      .eq('estado', 'completado')
-      .order('fecha', { ascending: true })
+    // ✅ SOLUCIÓN: Implementar paginación para datos de tendencias
+    let allTrendsData = []
+    let start = 0
+    const pageSize = 1000
+    let hasMore = true
     
-    if (error) throw error
+    while (hasMore) {
+      console.log(`📈 Cargando página tendencias ${Math.floor(start/pageSize) + 1} (desde ${start})`) // Debug
+      
+      const { data: pageData, error } = await supabase
+        .from('turnos')
+        .select('fecha, estado, pago, cobro')
+        .gte('fecha', filterDate)
+        .eq('estado', 'completado')
+        .range(start, start + pageSize - 1)
+        .order('fecha', { ascending: true })
+      
+      if (error) throw error
+      
+      if (pageData && pageData.length > 0) {
+        allTrendsData = [...allTrendsData, ...pageData]
+        start += pageSize
+        hasMore = pageData.length === pageSize
+        
+        console.log(`📈 Página tendencias cargada: ${pageData.length} registros, Total: ${allTrendsData.length}`) // Debug
+      } else {
+        hasMore = false
+      }
+    }
 
-    console.log('📈 Registros encontrados DESPUÉS del filtro:', data?.length) // Debug crítico
+    console.log('📈 TOTAL REGISTROS TENDENCIAS CARGADOS:', allTrendsData.length) // Debug crítico
 
     // Agrupar por fecha
     const dailyData = {}
-    data?.forEach(shift => {
+    allTrendsData?.forEach(shift => {
       if (!dailyData[shift.fecha]) {
         dailyData[shift.fecha] = { date: shift.fecha, shifts: 0, income: 0, costs: 0 }
       }
@@ -326,7 +405,7 @@ const Dashboard = () => {
 
     const daily = Object.values(dailyData).sort((a, b) => new Date(a.date) - new Date(b.date))
 
-    console.log('📈 Tendencias cargadas:', { registros: data?.length, días: daily.length }) // Debug
+    console.log('📈 Tendencias calculadas:', { registros: allTrendsData?.length, días: daily.length }) // Debug
 
     return { daily, weekly: [] }
   }
@@ -392,15 +471,54 @@ const Dashboard = () => {
     
     console.log('👥 Filtro fecha aplicado:', { topWorkersRange, filterDate }) // Debug crítico
     
-    const { data, error } = await query
+    // ✅ SOLUCIÓN: Implementar paginación para datos de trabajadores
+    let allWorkersData = []
+    let start = 0
+    const pageSize = 1000
+    let hasMore = true
+    
+    while (hasMore) {
+      console.log(`👥 Cargando página trabajadores ${Math.floor(start/pageSize) + 1} (desde ${start})`) // Debug
+      
+      let pageQuery = supabase
+        .from('turnos')
+        .select(`
+          trabajador_id,
+          estado,
+          pago,
+          fecha,
+          trabajador:trabajador_id (
+            nombre
+          )
+        `)
+        .eq('estado', 'completado')
+        .range(start, start + pageSize - 1)
+      
+      // Aplicar filtro de fecha si existe
+      if (filterDate) {
+        pageQuery = pageQuery.gte('fecha', filterDate)
+      }
+      
+      const { data: pageData, error } = await pageQuery
+      
+      if (error) throw error
+      
+      if (pageData && pageData.length > 0) {
+        allWorkersData = [...allWorkersData, ...pageData]
+        start += pageSize
+        hasMore = pageData.length === pageSize
+        
+        console.log(`👥 Página trabajadores cargada: ${pageData.length} registros, Total: ${allWorkersData.length}`) // Debug
+      } else {
+        hasMore = false
+      }
+    }
 
-    if (error) throw error
-
-    console.log('👥 Registros encontrados ANTES de agrupar:', data?.length) // Debug crítico
+    console.log('👥 TOTAL REGISTROS TRABAJADORES CARGADOS:', allWorkersData.length) // Debug crítico
 
     // Agrupar por trabajador
     const workerStats = {}
-    data?.forEach(shift => {
+    allWorkersData?.forEach(shift => {
       const workerId = shift.trabajador_id
       if (!workerStats[workerId]) {
         workerStats[workerId] = {
@@ -418,7 +536,7 @@ const Dashboard = () => {
       .sort((a, b) => b.shifts - a.shifts)
       .slice(0, 5)
 
-    console.log('👥 Top workers cargados:', { registros: data?.length, trabajadores: topWorkers.length }) // Debug
+    console.log('👥 Top workers calculados:', { registros: allWorkersData?.length, trabajadores: topWorkers.length }) // Debug
 
     return topWorkers
   }
