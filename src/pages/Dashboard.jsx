@@ -1334,8 +1334,8 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="text-right hidden md:block">
-              <p className="text-sm text-gray-500">Próxima actualización automática</p>
-              <p className="text-xs text-gray-400">en 30 segundos</p>
+              <p className="text-sm text-gray-500">Actualizado al cargar página</p>
+              <p className="text-xs text-gray-400">Solo se actualiza al cambiar de sección</p>
             </div>
           </div>
         </CardContent>
