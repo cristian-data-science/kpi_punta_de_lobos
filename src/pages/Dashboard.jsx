@@ -34,11 +34,11 @@ const Dashboard = () => {
     loading: true
   })
 
-  // Estados para filtros temporales
+  // Estados para filtros temporales - CONFIGURADOS CON VALORES MÁS GRANULARES
   const [timeFilters, setTimeFilters] = useState({
-    trendsRange: 30, // días
-    topWorkersRange: 'all', // 'all', 'month', 'year'
-    financialRange: 'all' // 'all', 'month', 'year'
+    trendsRange: 7, // CAMBIADO: 7 días (más granular)
+    topWorkersRange: 'month', // CAMBIADO: mes (más granular que 'all')
+    financialRange: 'month' // CAMBIADO: mes (más granular que 'all')
   })
 
   const supabase = getSupabaseClient()
