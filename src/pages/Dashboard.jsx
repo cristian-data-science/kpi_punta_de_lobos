@@ -1,3 +1,11 @@
+
+// File: dashboard_transapp_unificado.jsx
+// Merged visuals (from dashboard_antiguo_visual) + functional queries (from dashboard_nuevo_funcional)
+// - Workers & Shifts: counts via HEAD (exact) in parallel
+// - Financial: single-pass aggregation with dynamic date windows (month/year/all)
+// - Trends & Top Workers: deterministic pagination driven by HEAD counts (robust), filtered by range
+// - Visuals: preserved from the original visual dashboard (cards, ECharts options, layout)
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
   Users, 
@@ -15,584 +23,364 @@ import {
   PieChart,
   Flame,
   Filter,
-  ChevronDown
+  Bug
 } from 'lucide-react'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { getSupabaseClient } from '@/services/supabaseClient'
 import ReactECharts from 'echarts-for-react'
 
+const PAGE_SIZE = 1000
+
+// ======== DEBUG TOGGLE ========
+const DEBUG_DEFAULT = false
+
+// ======== Date helpers (todas retornan YYYY-MM-DD en HORA LOCAL) ========
+const toISODate = (d) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+const startOfMonth = (year, month /* 0-based */) => toISODate(new Date(year, month, 1))
+const endOfMonth   = (year, month /* 0-based */) => toISODate(new Date(year, month + 1, 0))
+
+// Mes calendario actual (ej: si hoy es 2025-09-15 => 2025-09-01 a 2025-09-30)
+const getCurrentMonthRange = () => {
+  const today = new Date()
+  const y = today.getFullYear()
+  const m = today.getMonth()
+  return {
+    start: startOfMonth(y, m),
+    end: endOfMonth(y, m)
+  }
+}
+
+// Mes calendario anterior (ej: si hoy es 2025-09-15 => 2025-08-01 a 2025-08-31)
+const getPreviousMonthRange = () => {
+  const today = new Date()
+  const y = today.getFullYear()
+  const m = today.getMonth() - 1 // mes anterior
+  // Si es enero (month 0), ir a diciembre del año anterior
+  if (m < 0) {
+    return {
+      start: startOfMonth(y - 1, 11), // diciembre del año anterior
+      end: endOfMonth(y - 1, 11)
+    }
+  }
+  return {
+    start: startOfMonth(y, m),
+    end: endOfMonth(y, m)
+  }
+}
+
+// Año calendario completo actual (enero a diciembre)
+const getCurrentYearRange = () => {
+  const today = new Date()
+  const year = today.getFullYear()
+  return {
+    start: `${year}-01-01`,
+    end: `${year}-12-31`
+  }
+}
+
+// Para tendencias (7/30/90d) => rolling
+const getRollingDaysRange = (days) => {
+  const end = toISODate(new Date())
+  const from = new Date()
+  from.setDate(from.getDate() - days)
+  return { start: toISODate(from), end }
+}
+
+// Formateos
+const fmtCL = (v) => `$${(v || 0).toLocaleString('es-CL')}`
+const fmtPct = (v) => `${(v ?? 0) > 0 ? '+' : ''}${v}%`
+const fmtDate = (iso) => {
+  if (!iso) return '—'
+  const [y, m, d] = iso.split('-').map(n => parseInt(n, 10))
+  return new Date(y, m - 1, d).toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
+// ======== Component ========
 const Dashboard = () => {
-  // Estados para datos de Supabase
+  const supabase = getSupabaseClient()
+  const [debug, setDebug] = useState(DEBUG_DEFAULT)
+
   const [dashboardData, setDashboardData] = useState({
-    workers: { total: 0, active: 0 },
-    shifts: { total: 0, completed: 0, programmed: 0, cancelled: 0, today: 0 },
-    financial: { totalIncome: 0, totalCosts: 0, margin: 0, marginPercent: 0 },
-    trends: { daily: [], weekly: [] },
+    workers: { total: 0, active: 0, _debug: {} },
+    shifts: { total: 0, completed: 0, programmed: 0, cancelled: 0, today: 0, _debug: {} },
+    financial: { totalIncome: 0, totalCosts: 0, margin: 0, marginPercent: 0, _range: {start:null,end:null}, _debug: {} },
+    trends: { daily: [], weekly: [], _range: {start:null,end:null}, _debug: {} },
     topWorkers: [],
+    topWorkersRangeMeta: { start: null, end: null, _debug: {} },
     shiftDistribution: [],
     alerts: [],
     loading: true
   })
 
-  // Estados para filtros temporales - CONFIGURADOS CON VALORES MÁS GRANULARES
   const [timeFilters, setTimeFilters] = useState({
-    trendsRange: 7, // CAMBIADO: 7 días (más granular)
-    topWorkersRange: 'month', // CAMBIADO: mes (más granular que 'all')
-    financialRange: 'month' // CAMBIADO: mes (más granular que 'all')
+    trendsRange: 7,           // 7 / 30 / 90 días (rolling)
+    topWorkersRange: 'month', // 'month' => mes calendario actual
+    financialRange: 'month'   // 'month' => mes calendario actual
   })
 
-  const supabase = getSupabaseClient()
+  // ---------- QUERIES ----------
 
-  // ✅ SOLUCIÓN: useEffect separados para cargar datos específicos solo cuando es necesario
-  
-  // 1. Efecto inicial: Cargar datos base (solo una vez)
-  useEffect(() => {
-    const loadInitialData = async () => {
-      setDashboardData(prev => ({ ...prev, loading: true }))
-      
-      try {
-        console.log('� Carga inicial del dashboard')
-        
-        // Cargar datos que NO cambian con filtros
-        const [workersData, shiftsData] = await Promise.all([
-          loadWorkersData(),
-          loadShiftsData()
-        ])
-        
-        setDashboardData(prev => ({
-          ...prev,
-          workers: workersData,
-          shifts: shiftsData,
-          shiftDistribution: calculateShiftDistribution(shiftsData),
-          alerts: generateAlerts(workersData, shiftsData, prev.financial),
-          loading: false
-        }))
-        
-      } catch (error) {
-        console.error('❌ Error carga inicial:', error)
-        setDashboardData(prev => ({ ...prev, loading: false }))
-      }
-    }
-    
-    loadInitialData()
-  }, []) // ✅ Solo se ejecuta UNA VEZ
-  
-  // 2. Efecto para datos financieros (solo cuando cambia su filtro)
-  useEffect(() => {
-    const loadFilteredFinancialData = async () => {
-      console.log('💰 Actualizando solo datos financieros:', timeFilters.financialRange)
-      
-      try {
-        const financialData = await loadFinancialData(timeFilters.financialRange)
-        
-        setDashboardData(prev => ({
-          ...prev,
-          financial: financialData,
-          alerts: generateAlerts(prev.workers, prev.shifts, financialData)
-        }))
-        
-      } catch (error) {
-        console.error('❌ Error datos financieros:', error)
-      }
-    }
-    
-    // Solo ejecutar si ya tenemos datos base cargados
-    if (!dashboardData.loading) {
-      loadFilteredFinancialData()
-    }
-  }, [timeFilters.financialRange, dashboardData.loading]) // ✅ Solo cuando cambia filtro financiero
-  
-  // 3. Efecto para tendencias (solo cuando cambia su filtro)
-  useEffect(() => {
-    const loadFilteredTrendsData = async () => {
-      console.log('📈 Actualizando solo tendencias:', timeFilters.trendsRange)
-      
-      try {
-        const trendsData = await loadTrendsData(timeFilters.trendsRange)
-        
-        setDashboardData(prev => ({
-          ...prev,
-          trends: trendsData
-        }))
-        
-      } catch (error) {
-        console.error('❌ Error tendencias:', error)
-      }
-    }
-    
-    // Solo ejecutar si ya tenemos datos base cargados
-    if (!dashboardData.loading) {
-      loadFilteredTrendsData()
-    }
-  }, [timeFilters.trendsRange, dashboardData.loading]) // ✅ Solo cuando cambia filtro tendencias
-  
-  // 4. Efecto para top trabajadores (solo cuando cambia su filtro)
-  useEffect(() => {
-    const loadFilteredTopWorkersData = async () => {
-      console.log('👥 Actualizando solo top trabajadores:', timeFilters.topWorkersRange)
-      
-      try {
-        const topWorkersData = await loadTopWorkersData(timeFilters.topWorkersRange)
-        
-        setDashboardData(prev => ({
-          ...prev,
-          topWorkers: topWorkersData
-        }))
-        
-      } catch (error) {
-        console.error('❌ Error top trabajadores:', error)
-      }
-    }
-    
-    // Solo ejecutar si ya tenemos datos base cargados
-    if (!dashboardData.loading) {
-      loadFilteredTopWorkersData()
-    }
-  }, [timeFilters.topWorkersRange, dashboardData.loading]) // ✅ Solo cuando cambia filtro trabajadores
-
-  // Funciones para cargar datos específicos de Supabase
-  
-  /* 
-   * 📊 QUERY 1: TRABAJADORES
-   * SELECT id, nombre, estado FROM trabajadores
-   * Propósito: Contar total y trabajadores activos
-   */
+  // Workers via HEAD counts
   const loadWorkersData = async () => {
-    const { data, error } = await supabase
-      .from('trabajadores')
-      .select('id, nombre, estado')
-    
-    if (error) throw error
-    
-    const active = data?.filter(w => w.estado === 'activo').length || 0
-    return { total: data?.length || 0, active }
+    try {
+      const [totalRes, activeRes] = await Promise.all([
+        supabase.from('trabajadores').select('*', { count: 'exact', head: true }),
+        supabase.from('trabajadores').select('*', { count: 'exact', head: true }).eq('estado', 'activo')
+      ])
+      ;[totalRes, activeRes].forEach(r => { if (r.error) throw r.error })
+      const out = { 
+        total: totalRes.count || 0, 
+        active: activeRes.count || 0, 
+        _debug: { provider: 'HEAD/exact' } 
+      }
+      if (debug) console.log('👥 Workers:', out)
+      return out
+    } catch (err) {
+      console.error('Workers error:', err)
+      return { total: 0, active: 0, _debug: { error: String(err) } }
+    }
   }
 
-  /* 
-   * 📊 QUERY 2: TURNOS GENERALES (CON PAGINACIÓN COMPLETA)
-   * SELECT id, fecha, estado, turno_tipo, pago, cobro FROM turnos
-   * Propósito: Estadísticas generales de turnos y turnos del día
-   * SOLUCIÓN: Implementar paginación para obtener TODOS los registros (>1000)
-   */
+  // Shifts via HEAD counts
   const loadShiftsData = async () => {
-    console.log('📊 Cargando TODOS los turnos con paginación...') // Debug
-    
-    let allData = []
-    let start = 0
-    const pageSize = 1000
-    let hasMore = true
-    
-    // Paginación para obtener TODOS los registros
-    while (hasMore) {
-      console.log(`📄 Cargando página ${Math.floor(start/pageSize) + 1} (desde registro ${start})`) // Debug
-      
-      const { data, error } = await supabase
-        .from('turnos')
-        .select('id, fecha, estado, turno_tipo, pago, cobro')
-        .range(start, start + pageSize - 1)
-      
-      if (error) throw error
-      
-      if (data && data.length > 0) {
-        allData = [...allData, ...data]
-        start += pageSize
-        hasMore = data.length === pageSize // Si no devuelve página completa, no hay más
-        
-        console.log(`✅ Página cargada: ${data.length} registros, Total acumulado: ${allData.length}`) // Debug
-      } else {
-        hasMore = false
+    try {
+      const today = toISODate(new Date())
+      const [totalRes, completedRes, programmedRes, cancelledRes, todayRes] = await Promise.all([
+        supabase.from('turnos').select('*', { count: 'exact', head: true }),
+        supabase.from('turnos').select('*', { count: 'exact', head: true }).eq('estado', 'completado'),
+        supabase.from('turnos').select('*', { count: 'exact', head: true }).eq('estado', 'programado'),
+        supabase.from('turnos').select('*', { count: 'exact', head: true }).eq('estado', 'cancelado'),
+        supabase.from('turnos').select('*', { count: 'exact', head: true }).eq('fecha', today)
+      ])
+      ;[totalRes, completedRes, programmedRes, cancelledRes, todayRes].forEach(r => { if (r.error) throw r.error })
+      const out = {
+        total: totalRes.count || 0,
+        completed: completedRes.count || 0,
+        programmed: programmedRes.count || 0,
+        cancelled: cancelledRes.count || 0,
+        today: todayRes.count || 0,
+        _debug: { provider: 'HEAD/exact', today }
       }
-    }
-    
-    console.log(`🎯 TOTAL FINAL DE TURNOS CARGADOS: ${allData.length}`) // Debug crítico
-
-    const today = new Date().toISOString().split('T')[0]
-    const completed = allData?.filter(s => s.estado === 'completado').length || 0
-    const programmed = allData?.filter(s => s.estado === 'programado').length || 0
-    const cancelled = allData?.filter(s => s.estado === 'cancelado').length || 0
-    const todayShifts = allData?.filter(s => s.fecha === today).length || 0
-
-    console.log(`📈 Estadísticas calculadas: Total=${allData.length}, Completados=${completed}, Programados=${programmed}, Cancelados=${cancelled}`) // Debug
-
-    return {
-      total: allData?.length || 0,
-      completed,
-      programmed,
-      cancelled,
-      today: todayShifts
+      if (debug) console.log('📊 Shifts:', out)
+      return out
+    } catch (err) {
+      console.error('Shifts error:', err)
+      return { total: 0, completed: 0, programmed: 0, cancelled: 0, today: 0, _debug: { error: String(err) } }
     }
   }
 
-  /* 
-   * 📊 QUERY 3: DATOS FINANCIEROS (CON FILTROS)
-   * SELECT pago, cobro FROM turnos WHERE estado = 'completado' [+ filtros temporales]
-   * Propósito: Calcular ingresos, costos y margen operativo
-   */
-  const loadFinancialData = async (financialRange) => {
-    console.log('💰 Cargando datos financieros con filtro:', financialRange) // Debug
-    
-    let query = supabase
-      .from('turnos')
-      .select('pago, cobro, fecha')
-      .eq('estado', 'completado')
+  // Financial (single-pass agg) con rango explícito (mes actual / mes anterior / año completo / todo)
+  const loadFinancialData = async (key) => {
+    let range = { start: null, end: null }
+    if (key === 'month') range = getCurrentMonthRange()
+    else if (key === 'previous-month') range = getPreviousMonthRange()
+    else if (key === 'year') range = getCurrentYearRange()
 
-    // LÓGICA CORREGIDA: Aplicar filtros basados en datos disponibles
-    let filterDate = null
-    
-    if (financialRange === 'month') {
-      // Mostrar solo los últimos 30 días de datos disponibles
-      const { data: allData } = await supabase
-        .from('turnos')
-        .select('fecha')
-        .eq('estado', 'completado')
-        .order('fecha', { ascending: false })
-        .limit(1)
-      
-      if (allData?.length > 0) {
-        const fechaMasReciente = new Date(allData[0].fecha)
-        fechaMasReciente.setDate(fechaMasReciente.getDate() - 30)
-        filterDate = fechaMasReciente.toISOString().split('T')[0]
-        query = query.gte('fecha', filterDate)
-      }
-    } else if (financialRange === 'year') {
-      // Mostrar solo los últimos 365 días de datos disponibles
-      const { data: allData } = await supabase
-        .from('turnos')
-        .select('fecha')
-        .eq('estado', 'completado')
-        .order('fecha', { ascending: false })
-        .limit(1)
-      
-      if (allData?.length > 0) {
-        const fechaMasReciente = new Date(allData[0].fecha)
-        fechaMasReciente.setDate(fechaMasReciente.getDate() - 365)
-        filterDate = fechaMasReciente.toISOString().split('T')[0]
-        query = query.gte('fecha', filterDate)
-      }
-    }
-    // Para 'all', no aplicar filtros
-    
-    console.log('💰 Filtro fecha aplicado:', { financialRange, filterDate }) // Debug crítico
-    
-    // ✅ SOLUCIÓN: Implementar paginación para datos financieros
-    let allFinancialData = []
-    let start = 0
-    const pageSize = 1000
-    let hasMore = true
-    
-    while (hasMore) {
-      console.log(`💰 Cargando página financiera ${Math.floor(start/pageSize) + 1} (desde ${start})`) // Debug
-      
-      let pageQuery = supabase
-        .from('turnos')
-        .select('pago, cobro, fecha')
-        .eq('estado', 'completado')
-        .range(start, start + pageSize - 1)
-      
-      // Aplicar filtros de fecha si existen
-      if (filterDate) {
-        pageQuery = pageQuery.gte('fecha', filterDate)
-      }
-      
-      const { data: pageData, error } = await pageQuery
-      
+    try {
+      let q = supabase.from('turnos').select('pago,cobro,estado,fecha')
+      if (range.start) q = q.gte('fecha', range.start)
+      if (range.end)   q = q.lte('fecha', range.end)
+      const { data, error } = await q
       if (error) throw error
-      
-      if (pageData && pageData.length > 0) {
-        allFinancialData = [...allFinancialData, ...pageData]
-        start += pageSize
-        hasMore = pageData.length === pageSize
-        
-        console.log(`💰 Página financiera cargada: ${pageData.length} registros, Total: ${allFinancialData.length}`) // Debug
-      } else {
-        hasMore = false
+
+      let totalCosts = 0, totalIncome = 0, processed = 0, completed = 0
+      data?.forEach(r => {
+        processed++
+        if (r?.pago  && r.pago  > 0) totalCosts  += r.pago
+        if (r?.cobro && r.cobro > 0) totalIncome += r.cobro
+        if (r?.estado === 'completado') completed++
+      })
+      const margin = totalIncome - totalCosts
+      const marginPercent = totalIncome > 0 ? Math.round(((margin / totalIncome) * 100) * 100) / 100 : 0
+
+      const out = {
+        totalIncome, totalCosts, margin, marginPercent,
+        _range: { ...range },
+        _debug: { rows: processed, completed, totalRows: processed, incomeRows: data?.filter(r => r?.cobro && r.cobro > 0).length || 0, costRows: data?.filter(r => r?.pago && r.pago > 0).length || 0 }
       }
-    }
-
-    console.log('💰 TOTAL REGISTROS FINANCIEROS CARGADOS:', allFinancialData.length) // Debug crítico
-
-    const totalCosts = allFinancialData?.reduce((sum, s) => sum + (s.pago || 0), 0) || 0
-    const totalIncome = allFinancialData?.reduce((sum, s) => sum + (s.cobro || 0), 0) || 0
-    const margin = totalIncome - totalCosts
-    const marginPercent = totalIncome > 0 ? ((margin / totalIncome) * 100) : 0
-
-    console.log('💰 Datos financieros calculados:', { totalIncome, totalCosts, margin, registros: allFinancialData?.length }) // Debug
-
-    return {
-      totalIncome,
-      totalCosts,
-      margin,
-      marginPercent: Math.round(marginPercent * 100) / 100
+      if (debug) console.log('💰 Financial:', out)
+      return out
+    } catch (err) {
+      console.error('Financial error:', err)
+      return { totalIncome: 0, totalCosts: 0, margin: 0, marginPercent: 0, _range: { start:null,end:null }, _debug: { error: String(err) } }
     }
   }
 
-  /* 
-   * 📊 QUERY 4: TENDENCIAS TEMPORALES (CON FILTROS)
-   * SELECT fecha, estado, pago, cobro FROM turnos 
-   * WHERE estado = 'completado' AND fecha >= [fecha_inicio]
-   * ORDER BY fecha ASC
-   * Propósito: Gráfico de evolución temporal de ingresos/costos/turnos
-   */
-  const loadTrendsData = async (trendsRange) => {
-    console.log('📈 Cargando tendencias con filtro:', trendsRange, 'días') // Debug
-    
-    // LÓGICA CORREGIDA: Obtener los últimos N días de datos disponibles
-    let filterDate = null
-    
-    // Obtener la fecha más reciente de los datos
-    const { data: recentData } = await supabase
-      .from('turnos')
-      .select('fecha')
-      .eq('estado', 'completado')
-      .order('fecha', { ascending: false })
-      .limit(1)
-    
-    if (recentData?.length > 0) {
-      const fechaMasReciente = new Date(recentData[0].fecha)
-      fechaMasReciente.setDate(fechaMasReciente.getDate() - trendsRange)
-      filterDate = fechaMasReciente.toISOString().split('T')[0]
-    } else {
-      // Fallback: usar fecha actual
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - trendsRange)
-      filterDate = startDate.toISOString().split('T')[0]
-    }
-    
-    console.log('📈 Filtro fecha aplicado:', { trendsRange, filterDate }) // Debug crítico
-    
-    // ✅ SOLUCIÓN: Implementar paginación para datos de tendencias
-    let allTrendsData = []
-    let start = 0
-    const pageSize = 1000
-    let hasMore = true
-    
-    while (hasMore) {
-      console.log(`📈 Cargando página tendencias ${Math.floor(start/pageSize) + 1} (desde ${start})`) // Debug
-      
-      const { data: pageData, error } = await supabase
-        .from('turnos')
-        .select('fecha, estado, pago, cobro')
-        .gte('fecha', filterDate)
-        .eq('estado', 'completado')
-        .range(start, start + pageSize - 1)
-        .order('fecha', { ascending: true })
-      
-      if (error) throw error
-      
-      if (pageData && pageData.length > 0) {
-        allTrendsData = [...allTrendsData, ...pageData]
-        start += pageSize
-        hasMore = pageData.length === pageSize
-        
-        console.log(`📈 Página tendencias cargada: ${pageData.length} registros, Total: ${allTrendsData.length}`) // Debug
-      } else {
-        hasMore = false
-      }
-    }
+  // Deterministic pagination helper
+  const fetchPaged = async ({ table, select, buildFilter, orderBy = null, pageSize = PAGE_SIZE }) => {
+    try {
+      let head = supabase.from(table).select('*', { count: 'exact', head: true })
+      if (buildFilter) head = buildFilter(head)
+      const { count, error: headErr } = await head
+      if (headErr) throw headErr
+      const total = count || 0
+      if (total === 0) return { rows: [], _debug: { total, pages: 0 } }
 
-    console.log('📈 TOTAL REGISTROS TENDENCIAS CARGADOS:', allTrendsData.length) // Debug crítico
-
-    // Agrupar por fecha
-    const dailyData = {}
-    allTrendsData?.forEach(shift => {
-      if (!dailyData[shift.fecha]) {
-        dailyData[shift.fecha] = { date: shift.fecha, shifts: 0, income: 0, costs: 0 }
+      const pages = Math.ceil(total / pageSize)
+      const out = []
+      for (let p = 0; p < pages; p++) {
+        const from = p * pageSize
+        const to = Math.min(from + pageSize - 1, total - 1)
+        let q = supabase.from(table).select(select).range(from, to)
+        if (buildFilter) q = buildFilter(q)
+        if (orderBy) q = q.order(orderBy.key, { ascending: orderBy.asc })
+        const { data, error } = await q
+        if (error) throw error
+        if (data && data.length) out.push(...data)
       }
-      dailyData[shift.fecha].shifts++
-      dailyData[shift.fecha].income += shift.cobro || 0
-      dailyData[shift.fecha].costs += shift.pago || 0
+      return { rows: out, _debug: { total, pages } }
+    } catch (err) {
+      console.error('fetchPaged error:', err)
+      return { rows: [], _debug: { error: String(err) } }
+    }
+  }
+
+  // Trends (rolling N días) con rango mostrado
+  const loadTrendsData = async (days) => {
+    const range = getRollingDaysRange(days)
+    const buildFilter = (q) => q.gte('fecha', range.start).lte('fecha', range.end).eq('estado', 'completado')
+    const { rows, _debug } = await fetchPaged({
+      table: 'turnos',
+      select: 'fecha,estado,pago,cobro',
+      buildFilter,
+      orderBy: { key: 'fecha', asc: true }
     })
 
-    const daily = Object.values(dailyData).sort((a, b) => new Date(a.date) - new Date(b.date))
-
-    console.log('📈 Tendencias calculadas:', { registros: allTrendsData?.length, días: daily.length }) // Debug
-
-    return { daily, weekly: [] }
+    const dailyMap = {}
+    rows.forEach(r => {
+      const key = r.fecha
+      if (!dailyMap[key]) dailyMap[key] = { date: key, shifts: 0, income: 0, costs: 0 }
+      dailyMap[key].shifts += 1
+      dailyMap[key].income += r?.cobro ? r.cobro : 0
+      dailyMap[key].costs  += r?.pago  ? r.pago  : 0
+    })
+    const daily = Object.values(dailyMap).sort((a, b) => new Date(a.date) - new Date(b.date))
+    const out = { daily, weekly: [], _range: range, _debug: { ..._debug, rowsFetched: rows.length, days: daily.length } }
+    if (debug) console.log('📈 Trends:', out)
+    return out
   }
 
-  /* 
-   * 📊 QUERY 5: TOP TRABAJADORES (CON FILTROS)
-   * SELECT trabajador_id, estado, pago, trabajador.nombre 
-   * FROM turnos 
-   * LEFT JOIN trabajadores ON turnos.trabajador_id = trabajadores.id
-   * WHERE estado = 'completado' [+ filtros temporales]
-   * Propósito: Ranking de trabajadores por número de turnos
-   */
-  const loadTopWorkersData = async (topWorkersRange) => {
-    console.log('👥 Cargando top workers con filtro:', topWorkersRange) // Debug
-    
-    let query = supabase
-      .from('turnos')
-      .select(`
-        trabajador_id,
-        estado,
-        pago,
-        fecha,
-        trabajador:trabajador_id (
-          nombre
-        )
-      `)
-      .eq('estado', 'completado')
+  // Top workers (month => mes actual, prev_month => mes anterior, year => año completo, all => sin filtro)
+  const loadTopWorkersData = async (key) => {
+    let range = { start: null, end: null }
+    if (key === 'month') range = getCurrentMonthRange()
+    else if (key === 'prev_month') range = getPreviousMonthRange()
+    else if (key === 'year') range = getCurrentYearRange()
 
-    // Aplicar filtros temporales CORREGIDOS con datos disponibles
-    let filterDate = null
-    if (topWorkersRange === 'month' || topWorkersRange === 'year') {
-      // LÓGICA CORREGIDA: Obtener fechas de los datos disponibles
-      const { data: recentData } = await supabase
-        .from('turnos')
-        .select('fecha')
-        .eq('estado', 'completado')
-        .order('fecha', { ascending: false })
-        .limit(1)
-      
-      if (recentData?.length > 0) {
-        const fechaMasReciente = new Date(recentData[0].fecha)
-        if (topWorkersRange === 'month') {
-          fechaMasReciente.setDate(fechaMasReciente.getDate() - 30) // Últimos 30 días de datos
-        } else if (topWorkersRange === 'year') {
-          fechaMasReciente.setDate(fechaMasReciente.getDate() - 365) // Últimos 365 días de datos
-        }
-        filterDate = fechaMasReciente.toISOString().split('T')[0]
-        query = query.gte('fecha', filterDate)
-      } else if (topWorkersRange === 'month') {
-        // Fallback: usar fecha actual
-        filterDate = new Date()
-        filterDate.setMonth(filterDate.getMonth() - 1)
-        filterDate = filterDate.toISOString().split('T')[0]
-        query = query.gte('fecha', filterDate)
-      } else if (topWorkersRange === 'year') {
-        // Fallback: usar fecha actual
-        filterDate = new Date()
-        filterDate.setFullYear(filterDate.getFullYear() - 1)
-        filterDate = filterDate.toISOString().split('T')[0] 
-        query = query.gte('fecha', filterDate)
-      }
-    }
-    
-    console.log('👥 Filtro fecha aplicado:', { topWorkersRange, filterDate }) // Debug crítico
-    
-    // ✅ SOLUCIÓN: Implementar paginación para datos de trabajadores
-    let allWorkersData = []
-    let start = 0
-    const pageSize = 1000
-    let hasMore = true
-    
-    while (hasMore) {
-      console.log(`👥 Cargando página trabajadores ${Math.floor(start/pageSize) + 1} (desde ${start})`) // Debug
-      
-      let pageQuery = supabase
-        .from('turnos')
-        .select(`
-          trabajador_id,
-          estado,
-          pago,
-          fecha,
-          trabajador:trabajador_id (
-            nombre
-          )
-        `)
-        .eq('estado', 'completado')
-        .range(start, start + pageSize - 1)
-      
-      // Aplicar filtro de fecha si existe
-      if (filterDate) {
-        pageQuery = pageQuery.gte('fecha', filterDate)
-      }
-      
-      const { data: pageData, error } = await pageQuery
-      
-      if (error) throw error
-      
-      if (pageData && pageData.length > 0) {
-        allWorkersData = [...allWorkersData, ...pageData]
-        start += pageSize
-        hasMore = pageData.length === pageSize
-        
-        console.log(`👥 Página trabajadores cargada: ${pageData.length} registros, Total: ${allWorkersData.length}`) // Debug
-      } else {
-        hasMore = false
-      }
+    const buildFilter = (q) => {
+      let x = q.eq('estado', 'completado')
+      if (range.start) x = x.gte('fecha', range.start)
+      if (range.end)   x = x.lte('fecha', range.end)
+      return x
     }
 
-    console.log('👥 TOTAL REGISTROS TRABAJADORES CARGADOS:', allWorkersData.length) // Debug crítico
+    const { rows, _debug } = await fetchPaged({
+      table: 'turnos',
+      select: `trabajador_id,estado,pago,fecha,trabajador:trabajador_id(nombre)`,
+      buildFilter
+    })
 
-    // Agrupar por trabajador
-    const workerStats = {}
-    allWorkersData?.forEach(shift => {
-      const workerId = shift.trabajador_id
-      if (!workerStats[workerId]) {
-        workerStats[workerId] = {
-          id: workerId,
-          name: shift.trabajador?.nombre || 'Trabajador Desconocido',
+    const stats = {}
+    rows.forEach(r => {
+      const id = r.trabajador_id
+      if (!stats[id]) {
+        stats[id] = {
+          id,
+          name: r?.trabajador?.nombre || 'Trabajador Desconocido',
           shifts: 0,
           totalPay: 0
         }
       }
-      workerStats[workerId].shifts++
-      workerStats[workerId].totalPay += shift.pago || 0
+      stats[id].shifts += 1
+      stats[id].totalPay += r?.pago ? r.pago : 0
     })
 
-    const topWorkers = Object.values(workerStats)
-      .sort((a, b) => b.shifts - a.shifts)
-      .slice(0, 5)
-
-    console.log('👥 Top workers calculados:', { registros: allWorkersData?.length, trabajadores: topWorkers.length }) // Debug
-
-    return topWorkers
+    const top = Object.values(stats).sort((a, b) => b.shifts - a.shifts).slice(0, 5)
+    const meta = { start: range.start, end: range.end, _debug: { ..._debug, rowsFetched: rows.length, workers: Object.keys(stats).length } }
+    if (debug) console.log('👥 TopWorkers:', { top, meta })
+    return { top, meta }
   }
 
-  const calculateShiftDistribution = (shiftsData) => {
-    const { total, completed, programmed, cancelled } = shiftsData
-    return [
-      { name: 'Completados', value: completed, color: '#10b981' },
-      { name: 'Programados', value: programmed, color: '#3b82f6' },
-      { name: 'Cancelados', value: cancelled, color: '#ef4444' }
-    ]
-  }
+  // ---------- Effects ----------
+
+  useEffect(() => {
+    const init = async () => {
+      setDashboardData(prev => ({ ...prev, loading: true }))
+      const [workers, shifts] = await Promise.all([loadWorkersData(), loadShiftsData()])
+      setDashboardData(prev => ({
+        ...prev,
+        workers,
+        shifts,
+        shiftDistribution: calculateShiftDistribution(shifts),
+        alerts: generateAlerts(workers, shifts, prev.financial),
+        loading: false
+      }))
+    }
+    init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const run = async () => {
+      if (dashboardData.loading) return
+      const financial = await loadFinancialData(timeFilters.financialRange)
+      setDashboardData(prev => ({
+        ...prev,
+        financial,
+        alerts: generateAlerts(prev.workers, prev.shifts, financial)
+      }))
+    }
+    run()
+  }, [timeFilters.financialRange, dashboardData.loading])
+
+  useEffect(() => {
+    const run = async () => {
+      if (dashboardData.loading) return
+      const trends = await loadTrendsData(timeFilters.trendsRange)
+      setDashboardData(prev => ({ ...prev, trends }))
+    }
+    run()
+  }, [timeFilters.trendsRange, dashboardData.loading])
+
+  useEffect(() => {
+    const run = async () => {
+      if (dashboardData.loading) return
+      const { top, meta } = await loadTopWorkersData(timeFilters.topWorkersRange)
+      setDashboardData(prev => ({ ...prev, topWorkers: top, topWorkersRangeMeta: meta }))
+    }
+    run()
+  }, [timeFilters.topWorkersRange, dashboardData.loading])
+
+  // ---------- Helpers visuales ----------
+
+  const calculateShiftDistribution = (s) => ([
+    { name: 'Completados', value: s.completed, color: '#10b981' },
+    { name: 'Programados', value: s.programmed, color: '#3b82f6' },
+    { name: 'Cancelados', value: s.cancelled, color: '#ef4444' }
+  ])
 
   const generateAlerts = (workers, shifts, financial) => {
     const alerts = []
-    
-    if (workers.active < workers.total * 0.8) {
-      alerts.push({
-        type: 'warning',
-        message: `Solo ${workers.active} de ${workers.total} trabajadores activos`,
-        priority: 'high'
-      })
+    if ((workers.active || 0) < Math.max(1, Math.ceil((workers.total || 0) * 0.8))) {
+      alerts.push({ type: 'warning', message: `Solo ${workers.active} de ${workers.total} trabajadores activos`, priority: 'high' })
     }
-
-    if (shifts.today === 0) {
-      alerts.push({
-        type: 'info',
-        message: 'No hay turnos programados para hoy',
-        priority: 'medium'
-      })
+    if ((shifts.today || 0) === 0) {
+      alerts.push({ type: 'info', message: 'No hay turnos programados para hoy', priority: 'medium' })
     }
-
-    if (financial.marginPercent < 20 && financial.totalIncome > 0) {
-      alerts.push({
-        type: 'error',
-        message: `Margen bajo: ${financial.marginPercent}%`,
-        priority: 'critical'
-      })
+    if ((financial.totalIncome || 0) > 0 && (financial.marginPercent || 0) < 20) {
+      alerts.push({ type: 'error', message: `Margen bajo: ${financial.marginPercent}%`, priority: 'critical' })
     }
-
     return alerts
   }
 
-  // Formatear números para mostrar
-  const formatCurrency = (value) => {
-    return `$${value.toLocaleString('es-CL')}`
-  }
-
-  const formatPercent = (value) => {
-    return `${value > 0 ? '+' : ''}${value}%`
-  }
-
-  // ✅ OPTIMIZACIÓN: Memoizar opciones de gráficos para evitar re-renders innecesarios
-  const getTrendsChartOption = useMemo(() => {
+  // --- Chart options ---
+  const trendsOption = useMemo(() => {
     if (!dashboardData.trends.daily?.length) return null
-    
     return {
       tooltip: {
         trigger: 'axis',
@@ -610,134 +398,54 @@ const Dashboard = () => {
           return result
         }
       },
-      legend: {
-        data: ['Ingresos', 'Costos', 'Turnos'],
-        textStyle: { color: '#64748b' }
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
+      legend: { data: ['Ingresos', 'Costos', 'Turnos'], textStyle: { color: '#64748b' } },
+      grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
       xAxis: {
-        type: 'category',
-        boundaryGap: false,
+        type: 'category', boundaryGap: false,
         data: dashboardData.trends.daily.map(d => {
-          const date = new Date(d.date)
+          const [y,m,dd] = d.date.split('-').map(n => parseInt(n,10))
+          const date = new Date(y, m - 1, dd)
           return `${date.getDate()}/${date.getMonth() + 1}`
         }),
         axisLine: { lineStyle: { color: '#e2e8f0' } },
         axisLabel: { color: '#64748b' }
       },
       yAxis: [
-        {
-          type: 'value',
-          name: 'Millones (CLP)',
-          position: 'left',
+        { type: 'value', name: 'Millones (CLP)', position: 'left',
           axisLine: { lineStyle: { color: '#e2e8f0' } },
-          axisLabel: { 
-            color: '#64748b',
-            formatter: (value) => `$${(value/1000000).toFixed(1)}M`
-          }
-        },
-        {
-          type: 'value',
-          name: 'Turnos',
-          position: 'right',
+          axisLabel: { color: '#64748b', formatter: (value) => `$${(value/1000000).toFixed(1)}M` } },
+        { type: 'value', name: 'Turnos', position: 'right',
           axisLine: { lineStyle: { color: '#e2e8f0' } },
-          axisLabel: { color: '#64748b' }
-        }
+          axisLabel: { color: '#64748b' } }
       ],
       series: [
-        {
-          name: 'Ingresos',
-          type: 'line',
-          data: dashboardData.trends.daily.map(d => d.income),
-          smooth: true,
-          lineStyle: { color: '#10b981', width: 3 },
-          areaStyle: { color: 'rgba(16, 185, 129, 0.1)' }
-        },
-        {
-          name: 'Costos',
-          type: 'line',
-          data: dashboardData.trends.daily.map(d => d.costs),
-          smooth: true,
-          lineStyle: { color: '#ef4444', width: 3 },
-          areaStyle: { color: 'rgba(239, 68, 68, 0.1)' }
-        },
-        {
-          name: 'Turnos',
-          type: 'line',
-          yAxisIndex: 1,
-          data: dashboardData.trends.daily.map(d => d.shifts),
-          smooth: true,
-          lineStyle: { color: '#3b82f6', width: 3 }
-        }
+        { name: 'Ingresos', type: 'line', data: dashboardData.trends.daily.map(d => d.income), smooth: true,
+          lineStyle: { color: '#10b981', width: 3 }, areaStyle: { color: 'rgba(16, 185, 129, 0.1)' } },
+        { name: 'Costos', type: 'line', data: dashboardData.trends.daily.map(d => d.costs), smooth: true,
+          lineStyle: { color: '#ef4444', width: 3 }, areaStyle: { color: 'rgba(239, 68, 68, 0.1)' } },
+        { name: 'Turnos', type: 'line', yAxisIndex: 1, data: dashboardData.trends.daily.map(d => d.shifts), smooth: true,
+          lineStyle: { color: '#3b82f6', width: 3 } }
       ]
     }
-  }, [dashboardData.trends.daily]); // ✅ Solo se recalcula cuando cambian las tendencias
+  }, [dashboardData.trends.daily])
 
-  const getShiftDistributionChartOption = useMemo(() => {
+  const shiftDistOption = useMemo(() => {
     if (!dashboardData.shiftDistribution?.length) return null
-    
     return {
-      tooltip: {
-        trigger: 'item',
-        formatter: '{a} <br/>{b}: {c} ({d}%)'
-      },
-      legend: {
-        orient: 'vertical',
-        left: 'left',
-        textStyle: { color: '#64748b' }
-      },
-      series: [
-        {
-          name: 'Turnos',
-          type: 'pie',
-          radius: ['40%', '70%'],
-          avoidLabelOverlap: false,
-          label: {
-            show: false,
-            position: 'center'
-          },
-          emphasis: {
-            label: {
-              show: true,
-              fontSize: '18',
-              fontWeight: 'bold'
-            }
-          },
-          labelLine: {
-            show: false
-          },
-          data: dashboardData.shiftDistribution.map(item => ({
-            value: item.value,
-            name: item.name,
-            itemStyle: { color: item.color }
-          }))
-        }
-      ]
+      tooltip: { trigger: 'item', formatter: '{a} <br/>{b}: {c} ({d}%)' },
+      legend: { orient: 'vertical', left: 'left', textStyle: { color: '#64748b' } },
+      series: [{
+        name: 'Turnos', type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: false,
+        label: { show: false, position: 'center' },
+        emphasis: { label: { show: true, fontSize: '18', fontWeight: 'bold' } },
+        labelLine: { show: false },
+        data: dashboardData.shiftDistribution.map(it => ({ value: it.value, name: it.name, itemStyle: { color: it.color } }))
+      }]
     }
-  }, [dashboardData.shiftDistribution]); // ✅ Solo se recalcula cuando cambia distribución
+  }, [dashboardData.shiftDistribution])
 
-  // ✅ OPTIMIZACIÓN: Memoizar handlers de filtros para prevenir re-renders
-  const handleFinancialFilter = useCallback((newFilter) => {
-    console.log('💰 Cambiando filtro financiero:', newFilter)
-    setTimeFilters(prev => ({ ...prev, financialRange: newFilter }))
-  }, [])
-  
-  const handleTrendsFilter = useCallback((newFilter) => {
-    console.log('📈 Cambiando filtro tendencias:', newFilter)
-    setTimeFilters(prev => ({ ...prev, trendsRange: newFilter }))
-  }, [])
-  
-  const handleTopWorkersFilter = useCallback((newFilter) => {
-    console.log('👥 Cambiando filtro trabajadores:', newFilter)
-    setTimeFilters(prev => ({ ...prev, topWorkersRange: newFilter }))
-  }, [])
+  // ---------- UI ----------
 
-  // Renderizado condicional para carga
   if (dashboardData.loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -746,12 +454,12 @@ const Dashboard = () => {
           <p className="text-gray-600">Cargando datos del sistema...</p>
         </div>
       </div>
-    );
+    )
   }
 
   return (
     <div className="space-y-6 p-6 bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
-      {/* Header con personalidad */}
+      {/* Header */}
       <div className="relative">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-purple-600 to-orange-500 rounded-2xl blur opacity-20"></div>
         <div className="relative bg-white rounded-2xl p-6 shadow-xl border border-white/20">
@@ -767,197 +475,185 @@ const Dashboard = () => {
                 <p className="text-gray-600 mt-1">Dashboard Inteligente - Gestión de Flota en Tiempo Real</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Actualizado ahora</p>
-              <p className="text-lg font-semibold text-gray-700">
-                {new Date().toLocaleDateString('es-CL', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-sm text-gray-500">Actualizado ahora</p>
+                <p className="text-lg font-semibold text-gray-700">
+                  {new Date().toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Panel Financiero Central - PRIORIDAD CRÍTICA */}
+      {/* Panel Financiero + Filtros */}
       <div className="space-y-4">
-        {/* Filtros Financieros */}
         <div className="flex items-center justify-between bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center space-x-3">
             <Filter className="h-5 w-5 text-gray-600" />
             <span className="text-sm font-semibold text-gray-700">Filtros Financieros:</span>
-            {dashboardData.loading && (
-              <div className="flex items-center space-x-1 text-xs text-blue-600">
-                <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-600"></div>
-                <span>Actualizando...</span>
-              </div>
-            )}
+            <span className="text-xs text-gray-500">
+              Rango activo: {fmtDate(dashboardData.financial._range.start)} — {fmtDate(dashboardData.financial._range.end)}
+            </span>
           </div>
           <div className="flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={() => handleFinancialFilter('all')}
-              className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                timeFilters.financialRange === 'all' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
+            <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, financialRange: 'all' }))}
+              className={`px-3 py-1 text-xs rounded-lg transition-colors ${timeFilters.financialRange === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               Todo
             </button>
-            <button
-              type="button"
-              onClick={() => handleFinancialFilter('year')}
-              className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                timeFilters.financialRange === 'year' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
+            <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, financialRange: 'year' }))}
+              className={`px-3 py-1 text-xs rounded-lg transition-colors ${timeFilters.financialRange === 'year' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               Año
             </button>
-            <button
-              type="button"
-              onClick={() => handleFinancialFilter('month')}
-              className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                timeFilters.financialRange === 'month' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Mes
+            <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, financialRange: 'previous-month' }))}
+              className={`px-3 py-1 text-xs rounded-lg transition-colors ${timeFilters.financialRange === 'previous-month' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              Mes anterior
+            </button>
+            <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, financialRange: 'month' }))}
+              className={`px-3 py-1 text-xs rounded-lg transition-colors ${timeFilters.financialRange === 'month' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              Mes actual
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Ingresos Totales */}
-        <Card className="relative overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
-          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-emerald-600 opacity-5"></div>
-          <CardContent className="p-6 relative">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl">
-                <DollarSign className="h-6 w-6 text-white" />
-              </div>
-              <div className="text-right">
-                <div className="flex items-center text-emerald-600 text-xs font-semibold">
-                  <TrendingUp className="h-3 w-3 mr-1" />
-                  INGRESOS
+          {/* Ingresos Totales */}
+          <Card className="relative overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-emerald-600 opacity-5"></div>
+            <CardContent className="p-6 relative">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl">
+                  <DollarSign className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center text-emerald-600 text-xs font-semibold">
+                    <TrendingUp className="h-3 w-3 mr-1" />
+                    INGRESOS
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(dashboardData.financial.totalIncome)}
-              </p>
-              <p className="text-xs text-gray-500">
-                {timeFilters.financialRange === 'all' ? 'Total histórico' : 
-                 timeFilters.financialRange === 'year' ? 'Último año' : 'Último mes'} cobrado
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="space-y-2">
+                <p className="text-2xl font-bold text-gray-900">{fmtCL(dashboardData.financial.totalIncome)}</p>
+                <p className="text-xs text-gray-500">
+                  {timeFilters.financialRange === 'all' ? 'Total histórico (todos los registros)' : 
+                   timeFilters.financialRange === 'year' ? 
+                    `Año completo 2025 (${fmtDate(dashboardData.financial._range.start)} – ${fmtDate(dashboardData.financial._range.end)})` :
+                   timeFilters.financialRange === 'previous-month' ?
+                    `Mes anterior (${fmtDate(dashboardData.financial._range.start)} – ${fmtDate(dashboardData.financial._range.end)})` : 
+                    `Mes actual (${fmtDate(dashboardData.financial._range.start)} – ${fmtDate(dashboardData.financial._range.end)})`}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* Costos Operativos */}
-        <Card className="relative overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
-          <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-500 opacity-5"></div>
-          <CardContent className="p-6 relative">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl">
-                <Activity className="h-6 w-6 text-white" />
-              </div>
-              <div className="text-right">
-                <div className="flex items-center text-red-600 text-xs font-semibold">
-                  <Target className="h-3 w-3 mr-1" />
-                  COSTOS
+          {/* Costos */}
+          <Card className="relative overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-500 opacity-5"></div>
+            <CardContent className="p-6 relative">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl">
+                  <Activity className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center text-red-600 text-xs font-semibold">
+                    <Target className="h-3 w-3 mr-1" />
+                    COSTOS
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(dashboardData.financial.totalCosts)}
-              </p>
-              <p className="text-xs text-gray-500">Total pagado trabajadores</p>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="space-y-2">
+                <p className="text-2xl font-bold text-gray-900">{fmtCL(dashboardData.financial.totalCosts)}</p>
+                <p className="text-xs text-gray-500">
+                  {timeFilters.financialRange === 'all' ? 'Todos los pagos históricos' : 
+                   timeFilters.financialRange === 'year' ? 
+                    `Pagos año completo 2025 (${fmtDate(dashboardData.financial._range.start)} – ${fmtDate(dashboardData.financial._range.end)})` :
+                   timeFilters.financialRange === 'previous-month' ?
+                    `Pagos mes anterior (${fmtDate(dashboardData.financial._range.start)} – ${fmtDate(dashboardData.financial._range.end)})` : 
+                    `Pagos mes actual (${fmtDate(dashboardData.financial._range.start)} – ${fmtDate(dashboardData.financial._range.end)})`}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* Margen Operativo */}
-        <Card className="relative overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 opacity-5"></div>
-          <CardContent className="p-6 relative">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
-                <BarChart3 className="h-6 w-6 text-white" />
-              </div>
-              <div className="text-right">
-                <div className="flex items-center text-blue-600 text-xs font-semibold">
-                  <Flame className="h-3 w-3 mr-1" />
-                  MARGEN
+          {/* Margen */}
+          <Card className="relative overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 opacity-5"></div>
+            <CardContent className="p-6 relative">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
+                  <BarChart3 className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center text-blue-600 text-xs font-semibold">
+                    <Flame className="h-3 w-3 mr-1" />
+                    MARGEN
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(dashboardData.financial.margin)}
-              </p>
-              <p className="text-xs text-gray-500">
-                Rentabilidad: {formatPercent(dashboardData.financial.marginPercent)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="space-y-2">
+                <p className="text-2xl font-bold text-gray-900">{fmtCL(dashboardData.financial.margin)}</p>
+                <p className="text-xs text-gray-500">
+                  {`Rentabilidad: ${fmtPct(dashboardData.financial.marginPercent)} • `}
+                  {timeFilters.financialRange === 'all' ? 'Histórico completo' : 
+                   timeFilters.financialRange === 'year' ? 
+                    `Año 2025 (${fmtDate(dashboardData.financial._range.start)} – ${fmtDate(dashboardData.financial._range.end)})` :
+                   timeFilters.financialRange === 'previous-month' ?
+                    `Mes ant. (${fmtDate(dashboardData.financial._range.start)} – ${fmtDate(dashboardData.financial._range.end)})` : 
+                    `Mes act. (${fmtDate(dashboardData.financial._range.start)} – ${fmtDate(dashboardData.financial._range.end)})`}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* KPI Crítico */}
-        <Card className="relative overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 opacity-5"></div>
-          <CardContent className="p-6 relative">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl">
-                <Zap className="h-6 w-6 text-white" />
-              </div>
-              <div className="text-right">
-                <div className="flex items-center text-purple-600 text-xs font-semibold">
-                  <Trophy className="h-3 w-3 mr-1" />
-                  EFICIENCIA
+          {/* Eficiencia */}
+          <Card className="relative overflow-hidden hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
+            <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 opacity-5"></div>
+            <CardContent className="p-6 relative">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl">
+                  <Zap className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center text-purple-600 text-xs font-semibold">
+                    <Trophy className="h-3 w-3 mr-1" />
+                    EFICIENCIA
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-2xl font-bold text-gray-900">
-                {Math.round((dashboardData.shifts.completed / (dashboardData.shifts.total || 1)) * 100)}%
-              </p>
-              <p className="text-xs text-gray-500">Tasa completitud turnos</p>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="space-y-2">
+                <p className="text-2xl font-bold text-gray-900">
+                  {Math.round((dashboardData.shifts.completed / (dashboardData.shifts.total || 1)) * 100)}%
+                </p>
+                <p className="text-xs text-gray-500">
+                  {`Tasa completitud • ${dashboardData.shifts.completed} de ${dashboardData.shifts.total} turnos totales`}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-      </div>
 
-      {/* KPIs Operacionales - PRIORIDAD CRÍTICA */}
+      {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Trabajadores */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <Users className="h-5 w-5 text-blue-600" />
-                </div>
+                <div className="p-2 bg-blue-50 rounded-lg"><Users className="h-5 w-5 text-blue-600" /></div>
                 <div>
                   <p className="text-sm font-medium text-gray-600">Trabajadores</p>
-                  <p className="text-xl font-bold text-gray-900">
-                    {dashboardData.workers.active}/{dashboardData.workers.total}
-                  </p>
+                  <p className="text-xl font-bold text-gray-900">{dashboardData.workers.active}/{dashboardData.workers.total}</p>
                 </div>
               </div>
-              <div className="text-right text-xs text-gray-500">
-                {dashboardData.workers.active} activos
-              </div>
+              <div className="text-right text-xs text-gray-500">{dashboardData.workers.active} activos</div>
             </div>
+            {debug && (
+              <pre className="mt-3 text-[10px] text-gray-500 bg-gray-50 p-2 rounded border">
+                {JSON.stringify(dashboardData.workers._debug, null, 2)}
+              </pre>
+            )}
           </CardContent>
         </Card>
 
@@ -966,20 +662,19 @@ const Dashboard = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-orange-50 rounded-lg">
-                  <Calendar className="h-5 w-5 text-orange-600" />
-                </div>
+                <div className="p-2 bg-orange-50 rounded-lg"><Calendar className="h-5 w-5 text-orange-600" /></div>
                 <div>
                   <p className="text-sm font-medium text-gray-600">Turnos Hoy</p>
-                  <p className="text-xl font-bold text-gray-900">
-                    {dashboardData.shifts.today}
-                  </p>
+                  <p className="text-xl font-bold text-gray-900">{dashboardData.shifts.today}</p>
                 </div>
               </div>
-              <div className="text-right text-xs text-gray-500">
-                Programados
-              </div>
+              <div className="text-right text-xs text-gray-500">Programados</div>
             </div>
+            {debug && (
+              <pre className="mt-3 text-[10px] text-gray-500 bg-gray-50 p-2 rounded border">
+                {JSON.stringify(dashboardData.shifts._debug, null, 2)}
+              </pre>
+            )}
           </CardContent>
         </Card>
 
@@ -988,19 +683,13 @@ const Dashboard = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-green-50 rounded-lg">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                </div>
+                <div className="p-2 bg-green-50 rounded-lg"><CheckCircle2 className="h-5 w-5 text-green-600" /></div>
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Turnos</p>
-                  <p className="text-xl font-bold text-gray-900">
-                    {dashboardData.shifts.total}
-                  </p>
+                  <p className="text-xl font-bold text-gray-900">{dashboardData.shifts.total}</p>
                 </div>
               </div>
-              <div className="text-right text-xs text-gray-500">
-                {dashboardData.shifts.completed} completados
-              </div>
+              <div className="text-right text-xs text-gray-500">{dashboardData.shifts.completed} completados</div>
             </div>
           </CardContent>
         </Card>
@@ -1010,27 +699,21 @@ const Dashboard = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-purple-50 rounded-lg">
-                  <Activity className="h-5 w-5 text-purple-600" />
-                </div>
+                <div className="p-2 bg-purple-50 rounded-lg"><Activity className="h-5 w-5 text-purple-600" /></div>
                 <div>
                   <p className="text-sm font-medium text-gray-600">Sistema</p>
-                  <p className="text-xl font-bold text-green-600">
-                    ACTIVO
-                  </p>
+                  <p className="text-xl font-bold text-green-600">ACTIVO</p>
                 </div>
               </div>
-              <div className="text-right text-xs text-gray-500">
-                En línea
-              </div>
+              <div className="text-right text-xs text-gray-500">En línea</div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Gráficos Principales - PRIORIDAD ALTA */}
+      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Tendencias de Ingresos y Turnos */}
+        {/* Tendencias */}
         <Card className="hover:shadow-xl transition-shadow">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -1040,54 +723,23 @@ const Dashboard = () => {
                   Evolución Temporal ({timeFilters.trendsRange} días)
                 </CardTitle>
                 <CardDescription>
-                  Análisis de ingresos, costos y turnos completados
+                  {`Rango: ${fmtDate(dashboardData.trends._range.start)} — ${fmtDate(dashboardData.trends._range.end)}`}
                 </CardDescription>
               </div>
               <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => handleTrendsFilter(7)}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    timeFilters.trendsRange === 7 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  7d
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTrendsFilter(30)}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    timeFilters.trendsRange === 30 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  30d
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTrendsFilter(90)}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    timeFilters.trendsRange === 90 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  90d
-                </button>
+                <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, trendsRange: 7 }))}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${timeFilters.trendsRange === 7 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>7d</button>
+                <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, trendsRange: 30 }))}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${timeFilters.trendsRange === 30 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>30d</button>
+                <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, trendsRange: 90 }))}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${timeFilters.trendsRange === 90 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>90d</button>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="h-80">
-              {dashboardData.trends.daily.length > 0 && getTrendsChartOption ? (
-                <ReactECharts 
-                  option={getTrendsChartOption} 
-                  style={{ height: '100%', width: '100%' }}
-                  opts={{ renderer: 'svg' }}
-                />
+              {dashboardData.trends.daily.length > 0 && trendsOption ? (
+                <ReactECharts option={trendsOption} style={{ height: '100%', width: '100%' }} opts={{ renderer: 'svg' }} />
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500">
                   <div className="text-center">
@@ -1097,6 +749,11 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
+            {debug && (
+              <pre className="mt-3 text-[10px] text-gray-500 bg-gray-50 p-2 rounded border">
+                {JSON.stringify(dashboardData.trends._debug, null, 2)}
+              </pre>
+            )}
           </CardContent>
         </Card>
 
@@ -1110,45 +767,22 @@ const Dashboard = () => {
                   Top 5 Trabajadores
                 </CardTitle>
                 <CardDescription>
-                  Ranking por número de turnos completados - 
                   {timeFilters.topWorkersRange === 'all' ? 'Histórico' : 
-                   timeFilters.topWorkersRange === 'year' ? 'Último año' : 'Último mes'}
+                   timeFilters.topWorkersRange === 'year' ? 'Año completo 2025' : 
+                   timeFilters.topWorkersRange === 'prev_month' ? 'Mes anterior' : 'Mes actual'} — {
+                    `${fmtDate(dashboardData.topWorkersRangeMeta.start)} — ${fmtDate(dashboardData.topWorkersRangeMeta.end)}`
+                  }
                 </CardDescription>
               </div>
               <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => handleTopWorkersFilter('all')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    timeFilters.topWorkersRange === 'all' 
-                      ? 'bg-orange-600 text-white' 
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  Todo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTopWorkersFilter('year')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    timeFilters.topWorkersRange === 'year' 
-                      ? 'bg-orange-600 text-white' 
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  Año
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTopWorkersFilter('month')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    timeFilters.topWorkersRange === 'month' 
-                      ? 'bg-orange-600 text-white' 
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  Mes
-                </button>
+                <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, topWorkersRange: 'all' }))}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${timeFilters.topWorkersRange === 'all' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Todo</button>
+                <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, topWorkersRange: 'year' }))}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${timeFilters.topWorkersRange === 'year' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Año</button>
+                <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, topWorkersRange: 'prev_month' }))}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${timeFilters.topWorkersRange === 'prev_month' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Mes anterior</button>
+                <button type="button" onClick={() => setTimeFilters(prev => ({ ...prev, topWorkersRange: 'month' }))}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${timeFilters.topWorkersRange === 'month' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Mes actual</button>
               </div>
             </div>
           </CardHeader>
@@ -1167,7 +801,7 @@ const Dashboard = () => {
                     </div>
                     <div>
                       <p className="font-semibold text-gray-900">{worker.name}</p>
-                      <p className="text-xs text-gray-500">{formatCurrency(worker.totalPay)} pagado</p>
+                      <p className="text-xs text-gray-500">{fmtCL(worker.totalPay)} pagado</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -1182,31 +816,30 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
+            {debug && (
+              <pre className="mt-3 text-[10px] text-gray-500 bg-gray-50 p-2 rounded border">
+                {JSON.stringify(dashboardData.topWorkersRangeMeta._debug, null, 2)}
+              </pre>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Análisis Operativo - PRIORIDAD MEDIA */}
+      {/* Secondary analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Distribución de Turnos */}
+        {/* Distribución */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PieChart className="h-5 w-5 text-green-600" />
               Estado de Turnos
             </CardTitle>
-            <CardDescription>
-              Distribución por estado
-            </CardDescription>
+            <CardDescription>Distribución por estado</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-64">
-              {dashboardData.shiftDistribution.some(d => d.value > 0) && getShiftDistributionChartOption ? (
-                <ReactECharts 
-                  option={getShiftDistributionChartOption} 
-                  style={{ height: '100%', width: '100%' }}
-                  opts={{ renderer: 'svg' }}
-                />
+              {dashboardData.shiftDistribution.some(d => d.value > 0) && shiftDistOption ? (
+                <ReactECharts option={shiftDistOption} style={{ height: '100%', width: '100%' }} opts={{ renderer: 'svg' }} />
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500">
                   <div className="text-center">
@@ -1219,16 +852,14 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Resumen de Estados */}
+        {/* Resumen Operativo */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Activity className="h-5 w-5 text-purple-600" />
               Resumen Operativo
             </CardTitle>
-            <CardDescription>
-              Métricas de estado actual
-            </CardDescription>
+            <CardDescription>Métricas de estado actual</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -1239,7 +870,6 @@ const Dashboard = () => {
                 </div>
                 <span className="text-lg font-bold text-green-900">{dashboardData.shifts.completed}</span>
               </div>
-              
               <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-blue-600" />
@@ -1247,7 +877,6 @@ const Dashboard = () => {
                 </div>
                 <span className="text-lg font-bold text-blue-900">{dashboardData.shifts.programmed}</span>
               </div>
-              
               <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-red-600" />
@@ -1255,7 +884,6 @@ const Dashboard = () => {
                 </div>
                 <span className="text-lg font-bold text-red-900">{dashboardData.shifts.cancelled}</span>
               </div>
-
               <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
                 <div className="flex items-center gap-2">
                   <Target className="h-4 w-4 text-orange-600" />
@@ -1269,40 +897,34 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Alertas Críticas */}
+        {/* Alertas */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-red-600" />
               Alertas del Sistema
             </CardTitle>
-            <CardDescription>
-              Notificaciones importantes
-            </CardDescription>
+            <CardDescription>Notificaciones importantes</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {dashboardData.alerts.length > 0 ? dashboardData.alerts.map((alert, index) => (
-                <div key={index} className={`p-3 rounded-lg border-l-4 ${
+              {dashboardData.alerts.length > 0 ? dashboardData.alerts.map((alert, idx) => (
+                <div key={idx} className={`p-3 rounded-lg border-l-4 ${
                   alert.type === 'error' ? 'bg-red-50 border-red-500' :
                   alert.type === 'warning' ? 'bg-orange-50 border-orange-500' :
                   'bg-blue-50 border-blue-500'
                 }`}>
                   <div className="flex items-start gap-2">
-                    {alert.type === 'error' && <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />}
-                    {alert.type === 'warning' && <AlertCircle className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />}
-                    {alert.type === 'info' && <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />}
+                    <AlertCircle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${
+                      alert.type === 'error' ? 'text-red-600' :
+                      alert.type === 'warning' ? 'text-orange-600' : 'text-blue-600'
+                    }`} />
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-medium ${
                         alert.type === 'error' ? 'text-red-900' :
-                        alert.type === 'warning' ? 'text-orange-900' :
-                        'text-blue-900'
-                      }`}>
-                        {alert.message}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Prioridad: {alert.priority}
-                      </p>
+                        alert.type === 'warning' ? 'text-orange-900' : 'text-blue-900'
+                      }`}>{alert.message}</p>
+                      <p className="text-xs text-gray-500 mt-1">Prioridad: {alert.priority}</p>
                     </div>
                   </div>
                 </div>
@@ -1318,7 +940,7 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Footer con información adicional */}
+      {/* Footer */}
       <Card className="bg-gradient-to-r from-gray-50 via-blue-50 to-orange-50 border-0">
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
@@ -1328,18 +950,66 @@ const Dashboard = () => {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">TransApp Dashboard</h3>
-                <p className="text-gray-600 text-sm">
-                  Control Central de Gestión de Flota - Datos en tiempo real desde Supabase PostgreSQL
-                </p>
+                <p className="text-gray-600 text-sm">Control Central de Gestión de Flota - Datos en tiempo real desde Supabase PostgreSQL</p>
               </div>
             </div>
             <div className="text-right hidden md:block">
               <p className="text-sm text-gray-500">Actualizado al cargar página</p>
-              <p className="text-xs text-gray-400">Solo se actualiza al cambiar de sección</p>
+              <p className="text-xs text-gray-400">Se actualiza al cambiar filtros</p>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Botón Debug - Posición discreta al final */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setDebug(v => !v)}
+          className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors opacity-50 hover:opacity-100 ${
+            debug ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-gray-100 text-gray-500 border border-gray-200'
+          }`}
+          title="Toggle Debug Info"
+        >
+          <Bug className="h-3 w-3" />
+          {debug ? 'Ocultar' : 'Debug'}
+        </button>
+      </div>
+
+      {/* Debug panel global (fácil de quitar) */}
+      {debug && (
+        <Card className="border border-red-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-700">
+              <Bug className="h-5 w-5" />
+              Debug Panel
+            </CardTitle>
+            <CardDescription className="text-red-500">Datos auxiliares para trazabilidad (quitar cambiando DEBUG_DEFAULT=false)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] text-gray-700">
+              <div className="space-y-2">
+                <h4 className="font-semibold text-sm text-gray-800 border-b pb-1">RANGOS Y FECHAS</h4>
+                <pre className="bg-gray-50 p-2 rounded border"><strong>financial._range</strong><br/>{JSON.stringify(dashboardData.financial._range, null, 2)}</pre>
+                <pre className="bg-gray-50 p-2 rounded border"><strong>trends._range</strong><br/>{JSON.stringify(dashboardData.trends._range, null, 2)}</pre>
+                <pre className="bg-gray-50 p-2 rounded border"><strong>topWorkers.range</strong><br/>{JSON.stringify({start: dashboardData.topWorkersRangeMeta.start, end: dashboardData.topWorkersRangeMeta.end}, null, 2)}</pre>
+              </div>
+              <div className="space-y-2">
+                <h4 className="font-semibold text-sm text-gray-800 border-b pb-1">CONTADORES Y ESTADÍSTICAS</h4>
+                <pre className="bg-gray-50 p-2 rounded border"><strong>workers._debug</strong><br/>{JSON.stringify(dashboardData.workers._debug, null, 2)}</pre>
+                <pre className="bg-gray-50 p-2 rounded border"><strong>shifts._debug</strong><br/>{JSON.stringify(dashboardData.shifts._debug, null, 2)}</pre>
+                <pre className="bg-gray-50 p-2 rounded border"><strong>financial._debug</strong><br/>{JSON.stringify(dashboardData.financial._debug, null, 2)}</pre>
+              </div>
+              <div className="space-y-2">
+                <h4 className="font-semibold text-sm text-gray-800 border-b pb-1">DATOS DETALLADOS</h4>
+                <pre className="bg-gray-50 p-2 rounded border"><strong>trends._debug</strong><br/>{JSON.stringify(dashboardData.trends._debug, null, 2)}</pre>
+                <pre className="bg-gray-50 p-2 rounded border"><strong>topWorkers._debug</strong><br/>{JSON.stringify(dashboardData.topWorkersRangeMeta._debug, null, 2)}</pre>
+                <pre className="bg-gray-50 p-2 rounded border"><strong>filters_active</strong><br/>{JSON.stringify({financialRange: timeFilters.financialRange, trendsRange: timeFilters.trendsRange + 'd', topWorkersRange: timeFilters.topWorkersRange}, null, 2)}</pre>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
