@@ -100,19 +100,8 @@ function Cobros() {
     try {
       console.log('🔄 Cargando semanas disponibles desde Supabase...')
       const weeks = await cobrosSupabaseService.getAvailableWeeksFromSupabase()
-      console.log('Raw weeks data:', weeks)
-      
-      // Convertir strings como '2025-W45' a objetos {year: 2025, week: 45}
-      const parsedWeeks = weeks.map(weekStr => {
-        const [yearStr, weekStr2] = weekStr.split('-W')
-        return {
-          year: parseInt(yearStr),
-          week: parseInt(weekStr2)
-        }
-      })
-      
-      setAvailableWeeks(parsedWeeks)
-      console.log(`✅ ${parsedWeeks.length} semanas disponibles cargadas y parseadas:`, parsedWeeks.slice(0, 3))
+      setAvailableWeeks(weeks)
+      console.log(`✅ ${weeks.length} semanas disponibles cargadas`)
     } catch (error) {
       console.error('❌ Error cargando semanas disponibles:', error)
       setAvailableWeeks([])
@@ -188,33 +177,17 @@ function Cobros() {
 
   // Obtener años disponibles
   const getAvailableYears = () => {
-    if (!availableWeeks || availableWeeks.length === 0) {
-      return []
-    }
-    
     const years = new Set()
-    availableWeeks.forEach(({ year }) => {
-      years.add(year)
-    })
+    availableWeeks.forEach(({ year }) => years.add(year))
     return Array.from(years).sort().reverse()
   }
 
   // Obtener semanas disponibles para un año específico  
   const getAvailableWeeksForYear = (year) => {
-    if (!availableWeeks || availableWeeks.length === 0) {
-      return []
-    }
-    
-    const weeks = availableWeeks
+    return availableWeeks
       .filter(item => item.year === year)
       .map(item => item.week)
-    
-    // Eliminar duplicados usando Set y validar números
-    const uniqueWeeks = [...new Set(weeks)]
-      .filter(week => week != null && week !== undefined && !isNaN(week))
-      .sort((a, b) => a - b);
-    
-    return uniqueWeeks
+      .sort((a, b) => a - b)
   }
 
   // Usar la función del servicio para consistencia
@@ -755,14 +728,11 @@ function Cobros() {
                 }}
                 className="w-full mt-2 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                {getAvailableYears()
-                  .filter(year => year != null && year !== undefined)
-                  .map((year, index) => (
-                    <option key={`year-${year}-${index}`} value={year}>
-                      {year}
-                    </option>
-                  ))
-                }
+                {getAvailableYears().map(year => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -774,8 +744,8 @@ function Cobros() {
                 onChange={(e) => setSelectedWeek(parseInt(e.target.value))}
                 className="w-full mt-2 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                {getAvailableWeeksForYear(selectedYear).map((week, index) => (
-                  <option key={`week-${selectedYear}-${week}-${index}`} value={week}>
+                {getAvailableWeeksForYear(selectedYear).map(week => (
+                  <option key={week} value={week}>
                     Semana {week} {formatWeekRange(selectedYear, week)}
                   </option>
                 ))}
@@ -877,7 +847,7 @@ function Cobros() {
                 </thead>
                 <tbody>
                   {getTurnosPorTrabajador().map((trabajador, index) => (
-                    <tr key={`${trabajador.nombre}-${index}`} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
+                    <tr key={trabajador.nombre} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">

@@ -81,17 +81,25 @@ Layout (Header + Sidebar + Outlet)
 - **Null Safety**: Robust validation for chart data prevents rendering errors
 - **Performance**: Only affected components update, maintaining UI state and scroll position
 
-### Optimized Filter System
+### Optimized Filter System (ENHANCED)
 **Components**:
 - **Financial Filters**: Todo/Año/Mes - Updates financial cards only
 - **Trends Filters**: 7d/30d/90d - Updates trend chart only  
-- **Top Workers Filters**: Todo/Año/Mes - Updates worker rankings only
+- **Top Workers Filters**: Todo/Año/Mes anterior/Mes actual - Updates worker rankings only
+
+**NEW: Mes Anterior Filter (September 2025)**:
+- **Implementation**: Added 'prev_month' option to topWorkersRange filter
+- **Logic**: Uses existing `getPreviousMonthRange()` for complete previous month calculation
+- **UI**: New "Mes anterior" button between "Año" and "Mes actual" with consistent styling
+- **Functionality**: Shows full previous month data (e.g., Aug 1-31 when current is Sep 15)
+- **Calendar Logic**: Handles year boundaries correctly (Dec previous year when current is Jan)
 
 **Technical Features**:
 - **Independent Updates**: Each filter affects only its specific data section
 - **State Preservation**: User scroll position and UI context maintained
 - **Smooth Transitions**: No page flicker or component reconstruction
 - **Real-time Response**: Immediate visual feedback without loading states
+- **Debug Control**: DEBUG_DEFAULT now set to `false` for clean production console
 
 ### Performance Optimizations Applied
 1. **Separated Data Loading**: Each useEffect handles specific dashboard section
@@ -204,47 +212,69 @@ turnos table:
 }
 ```
 
-## Cobros System Architecture
+## Cobros System Architecture (ENHANCED PERFORMANCE)
 
-### Billing Management Module
-- **Location**: `src/pages/Cobros.jsx` (689 lines) - Complete billing interface with professional Excel export
-- **Purpose**: Shift-based billing calculation with configurable tariffs per shift
-- **Navigation**: Replaced Routes section in sidebar with Receipt icon
+### Weekly On-Demand Loading System (IMPLEMENTED)
+**Location**: `src/pages/Cobros.jsx` - Optimized collections interface with weekly cache system
+**Problem Solved**: Previous system loaded ALL turnos data causing performance issues and 1000-record Supabase limits
+**Performance Impact**: Reduced initial load time, eliminated pagination problems, smooth weekly navigation
 
-### Core Features
-- **Configurable Tariffs**: localStorage-persisted tariff configuration with real-time updates
-- **Period Filtering**: Weekly/Monthly view modes with ISO 8601 week calculations
-- **Professional Excel Export**: Enterprise-grade ExcelJS integration with advanced styling
-- **Real-time Calculations**: Dynamic billing totals based on shift counts and configured rates
+### Enhanced Cobros Architecture
+**Core Features**:
+- **Weekly Cache System**: Map-based cache prevents redundant data loading for visited weeks
+- **On-Demand Loading**: Only loads data for selected week, not entire dataset
+- **Available Weeks API**: Lightweight query to get available weeks without loading full data
+- **Supabase Pagination**: Uses service-layer pagination to handle 2000+ turnos without limits
+- **React Key Optimization**: Composite keys prevent duplicate key warnings in JSX rendering
 
-### Professional Excel Export Features
-- **Advanced Styling**: Multi-sheet workbooks with professional formatting
-- **Title Design**: Arial Black fonts with gradient backgrounds and thick borders
-- **Information Sections**: Color-coded sections with gradient backgrounds
-- **Data Tables**: Alternating row colors, column-specific styling, professional borders
-- **Detail Sheets**: Comprehensive breakdown with visual hierarchy and color coding
-- **Column Optimization**: Auto-sized columns with specific styling per data type
+### Cobros Service Layer (OPTIMIZED)
+**Location**: `src/services/cobrosSupabaseService.js` - Enhanced service with weekly loading capabilities
+**New Functions**:
+- **`loadTurnosForWeek(year, week)`**: Loads specific week data with date range filtering
+- **`getAvailableWeeksFromSupabase()`**: Paginated query to get all available weeks efficiently  
+- **`getWeekDates(year, week)`**: ISO 8601 week date calculation for accurate ranges
+- **`getWeekNumberForDate(date)`**: Consistent week number calculation across system
 
-### Week Calculation Algorithm
-- **Implementation**: `getWeekNumberForDate()` - ISO 8601 adapted for labor shifts
-- **Sunday Handling**: Treats Sundays as part of following week for labor context
-- **Algorithm Steps**:
-  1. If Sunday, use following Monday for calculation
-  2. Find Thursday of calculation week to determine ISO year
-  3. Calculate weeks from first Thursday of ISO year
-- **Consistency**: Unified across filtering and display functions
+### Technical Implementation
+**Data Parsing**: Converts Supabase week strings ('2025-W45') to objects ({year: 2025, week: 45})
+**Cache Management**: WeekCache Map stores loaded data with keys like '2025-W45' 
+**State Optimization**: Removed filteredTurnos state, data comes pre-filtered from service
+**React Performance**: Fixed duplicate key prop warnings with composite keys including year, week, and index
 
-### Data Processing
-- **Source Data**: `masterDataService.getWorkerShifts()` integration
-- **Filtering Logic**: `filterTurnosByPeriod()` with period-specific algorithms
-- **Worker Aggregation**: `getTurnosPorTrabajador()` with billing totals per worker
-- **Currency Formatting**: Chilean peso (CLP) with proper localization
+### Dashboard Financial Data Fix (CRITICAL ISSUE RESOLVED)
 
-### Excel Export Specifications
-- **Structure**: Multi-sheet workbook (Summary + Details)
-- **Metadata**: Company branding, export date, tariff configuration
-- **Professional Styling**: Headers, borders, currency formatting, column auto-sizing
-- **Dynamic Naming**: Period-specific file names with sanitized labels
+### Supabase Pagination Problem (FIXED)
+**Issue**: Dashboard financial filters "Todo" and "Todo el año" showed incorrect totals due to 1000-record limit
+**Root Cause**: `loadFinancialData()` used simple query `await q` which limits to 1000 records maximum
+**Impact**: With 2124+ turnos in database, only first 1000 were processed, causing wrong calculations
+
+### Solution Implementation
+**Before**: Simple query without pagination
+```javascript
+❌ const { data, error } = await q  // Limited to 1000 records
+```
+
+**After**: Using existing `fetchPaged` helper for complete data
+```javascript
+✅ const { rows: data, _debug } = await fetchPaged({
+    table: 'turnos',
+    select: 'pago,cobro,estado,fecha',
+    buildFilter
+}) // Processes ALL 2124+ records
+```
+
+### Results Validation
+**Expected Dashboard Results** (should now match direct Supabase query):
+- **Total Turnos**: 2124 completados
+- **Total Pagos (Costos)**: $216.385.000
+- **Total Cobros (Ingresos)**: $474.621.000
+- **Pagination Info**: Multiple pages processed automatically
+
+### Performance Benefits
+- **Complete Data**: All turnos processed, not just first 1000
+- **Automatic Pagination**: Handles large datasets seamlessly  
+- **Debug Information**: Added pagination metadata for monitoring
+- **Minimal Changes**: Only modified loadFinancialData function, preserved all other logic
 
 ## Payment System Architecture
 

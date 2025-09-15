@@ -23,12 +23,10 @@ function Payments() {
   const [lastUpdate, setLastUpdate] = useState(null)
   const [loading, setLoading] = useState(false) // Estado de carga
   
-  // Estados para el filtro de mes
-  const [viewMode, setViewMode] = useState('total') // 🔄 CAMBIAR: Empezar en vista total para ver todos los turnos
+  // Estados para el filtro de mes (SOLO MODO MENSUAL)
   const [selectedMonth, setSelectedMonth] = useState('') // Se inicializa con mes actual
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear()) // Año actual
   const [selectedMonthNum, setSelectedMonthNum] = useState(0) // Se inicializa con mes actual
-  const [filteredPayments, setFilteredPayments] = useState([])
 
   // Obtener número de semana para una fecha específica (algoritmo adaptado para la empresa)
   const getWeekNumberForDate = (date) => {
@@ -66,99 +64,72 @@ function Payments() {
     return weekNumber
   }
 
-  // Cargar datos de pagos - USANDO SUPABASE
-  const loadPaymentData = async () => {
+  // 🚀 NUEVO: Cache por mes para evitar recargas innecesarias
+  const [monthCache, setMonthCache] = useState(new Map())
+  const [availableMonths, setAvailableMonths] = useState([])
+
+  // 🔄 CAMBIO: Cargar solo meses disponibles al inicio (query ligera)
+  const loadAvailableMonths = async () => {
+    try {
+      console.log('📊 Cargando meses disponibles...')
+      const months = await paymentsSupabaseService.getAvailableMonthsFromSupabase()
+      setAvailableMonths(months)
+      console.log('✅ Meses disponibles cargados:', months)
+    } catch (error) {
+      console.error('❌ Error cargando meses disponibles:', error)
+      setAvailableMonths([])
+    }
+  }
+
+  // 🔄 CAMBIO: Cargar datos solo para mes específico (bajo demanda)
+  const loadPaymentDataForMonth = async (year, month) => {
+    const cacheKey = `${year}-${String(month).padStart(2, '0')}`
+    
+    // Verificar cache primero
+    if (monthCache.has(cacheKey)) {
+      console.log(`⚡ Usando datos cacheados para ${cacheKey}`)
+      const cachedData = monthCache.get(cacheKey)
+      setWorkerPayments(cachedData)
+      return cachedData
+    }
+
     setLoading(true)
     try {
-      console.log('💰 Cargando datos de pagos desde Supabase...')
+      console.log(`💰 Cargando pagos para ${year}-${month} desde Supabase...`)
       
-      const payments = await paymentsSupabaseService.calculateWorkerPayments()
+      // Usar nueva función del service layer
+      const turnos = await paymentsSupabaseService.loadTurnosForMonth(year, month)
+      const payments = await paymentsSupabaseService.calculateWorkerPaymentsFromTurnos(turnos)
+      
+      // Guardar en cache
+      const newCache = new Map(monthCache)
+      newCache.set(cacheKey, payments)
+      setMonthCache(newCache)
+      
       setWorkerPayments(payments)
       setLastUpdate(new Date())
       
-      console.log(`✅ Pagos cargados: ${payments.length} trabajadores procesados`)
+      console.log(`✅ Pagos cargados para ${cacheKey}: ${payments.length} trabajadores`)
+      return payments
       
-      // Si estamos en modo mensual y hay un mes seleccionado, filtrar
-      if (viewMode === 'monthly' && selectedMonth) {
-        filterPaymentsByMonth(payments, selectedMonth)
-      }
     } catch (error) {
-      console.error('❌ Error cargando datos de pagos:', error)
+      console.error(`❌ Error cargando pagos para ${year}-${month}:`, error)
       setWorkerPayments([])
+      return []
     } finally {
       setLoading(false)
     }
   }
 
-  // Función para filtrar pagos por mes
-  const filterPaymentsByMonth = (payments, month) => {
-    if (!month) {
-      setFilteredPayments([])
-      return
-    }
-
-    const [year, monthNum] = month.split('-')
-    const filtered = payments.map(worker => {
-      // Filtrar turnos del trabajador por el mes seleccionado
-      const turnosDelMes = worker.turnos.filter(turno => {
-        // Usar timezone local para consistencia
-        const [turnoYear, turnoMonth, day] = turno.fecha.split('-')
-        const turnoDate = new Date(parseInt(turnoYear), parseInt(turnoMonth) - 1, parseInt(day))
-        
-        const matchesYear = turnoDate.getFullYear() === parseInt(year)
-        const matchesMonth = (turnoDate.getMonth() + 1) === parseInt(monthNum)
-        
-        return matchesYear && matchesMonth
-      })
-
-      if (turnosDelMes.length === 0) return null
-
-      // Recalcular estadísticas para el mes usando campo 'pago' guardado
-      const totalMonto = turnosDelMes.reduce((sum, turno) => sum + (turno.tarifa || 0), 0)
-      const feriadosTrabajados = turnosDelMes.filter(turno => turno.isHoliday && !turno.isSunday).length
-      const domingosTrabajados = turnosDelMes.filter(turno => turno.isSunday).length
-
-      // Recalcular desgloses usando pagos guardados
-      const desglosePorTipo = {}
-      const desglosePorDia = {}
-
-      turnosDelMes.forEach(turno => {
-        const pagoTurno = turno.tarifa || 0  // 'tarifa' viene del campo 'pago' de Supabase
-        
-        // Por tipo de turno
-        if (!desglosePorTipo[turno.turno]) {
-          desglosePorTipo[turno.turno] = { cantidad: 0, monto: 0 }
-        }
-        desglosePorTipo[turno.turno].cantidad++
-        desglosePorTipo[turno.turno].monto += pagoTurno
-
-        // Por tipo de día
-        if (!desglosePorDia[turno.categoriasDia]) {
-          desglosePorDia[turno.categoriasDia] = { cantidad: 0, monto: 0 }
-        }
-        desglosePorDia[turno.categoriasDia].cantidad++
-        desglosePorDia[turno.categoriasDia].monto += pagoTurno
-      })
-
-      return {
-        ...worker,
-        turnos: turnosDelMes,
-        totalTurnos: turnosDelMes.length,
-        totalMonto,
-        feriadosTrabajados,
-        domingosTrabajados,
-        desglosePorTipo,
-        desglosePorDia
-      }
-    }).filter(worker => worker !== null)
-
-    setFilteredPayments(filtered)
+  // Helper para parsing consistente de fechas (timezone local)
+  const createLocalDate = (fechaString) => {
+    const [year, month, day] = fechaString.split('-')
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
   }
 
-  // Función para obtener los datos actuales (usa filtros de año/mes)
+  // 🔄 CAMBIO: Datos actuales son siempre los cargados (ya vienen filtrados por mes)
   const getCurrentPaymentsData = () => {
-    // Usar datos filtrados cuando hay mes seleccionado
-    return selectedMonth && filteredPayments.length >= 0 ? filteredPayments : workerPayments
+    return workerPayments
   }
 
   // Función para obtener los meses disponibles
@@ -166,7 +137,7 @@ function Payments() {
     const months = new Set()
     workerPayments.forEach(worker => {
       worker.turnos.forEach(turno => {
-        const date = new Date(turno.fecha)
+        const date = createLocalDate(turno.fecha)
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
         months.add(monthKey)
       })
@@ -174,40 +145,39 @@ function Payments() {
     return Array.from(months).sort().reverse() // Más recientes primero
   }
 
-  // Obtener años disponibles
+  // 🔄 CAMBIO: Obtener años disponibles desde Supabase
   const getAvailableYears = () => {
-    if (!workerPayments.length) return []
+    if (!availableMonths.length) return []
     
     const years = new Set()
-    workerPayments.forEach(worker => {
-      worker.turnos.forEach(turno => {
-        const date = new Date(turno.fecha)
-        years.add(date.getFullYear())
-      })
+    availableMonths.forEach(month => {
+      const [year] = month.split('-')
+      years.add(parseInt(year))
     })
     
     return Array.from(years).sort().reverse()
   }
 
-  // Obtener meses disponibles para un año específico
+  // 🔄 CAMBIO: Obtener meses disponibles para un año específico desde Supabase
   const getAvailableMonthsForYear = (year) => {
-    if (!workerPayments.length) return []
+    if (!availableMonths.length) return []
     
-    const months = new Set()
-    workerPayments.forEach(worker => {
-      worker.turnos.forEach(turno => {
-        const date = new Date(turno.fecha)
-        if (date.getFullYear() === year) {
-          months.add(date.getMonth() + 1) // getMonth() es 0-indexed
-        }
+    const months = availableMonths
+      .filter(month => {
+        const [monthYear] = month.split('-')
+        return parseInt(monthYear) === year
       })
-    })
+      .map(month => {
+        const [, monthNum] = month.split('-')
+        return parseInt(monthNum)
+      })
     
-    return Array.from(months).sort((a, b) => a - b)
+    return months.sort((a, b) => a - b)
   }
 
+  // 🔄 CAMBIO: Cargar meses disponibles al inicio (en lugar de todos los datos)
   useEffect(() => {
-    loadPaymentData()
+    loadAvailableMonths()
   }, [])
 
   // Establecer año y mes actual como inicial
@@ -227,14 +197,30 @@ function Payments() {
     }
   }, [selectedYear, selectedMonthNum])
 
-  // Efecto para filtrar cuando cambie el mes seleccionado
+  // 🔄 CAMBIO: Solo cargar datos del mes seleccionado (OPTIMIZADO)
   useEffect(() => {
-    if (selectedMonth && workerPayments.length > 0) {
-      filterPaymentsByMonth(workerPayments, selectedMonth)
-    } else {
-      setFilteredPayments([])
+    if (selectedMonth) {
+      const [year, month] = selectedMonth.split('-')
+      loadPaymentDataForMonth(parseInt(year), parseInt(month))
     }
-  }, [selectedMonth, workerPayments])
+  }, [selectedMonth])
+
+  // 🔄 Función de actualización inteligente según mes actual
+  // 🔄 Función de actualización para mes actual
+  const refreshCurrentData = () => {
+    if (selectedMonth) {
+      // Limpiar cache para el mes actual y recargar
+      const cacheKey = selectedMonth
+      const newCache = new Map(monthCache)
+      newCache.delete(cacheKey)
+      setMonthCache(newCache)
+      
+      const [year, month] = selectedMonth.split('-')
+      loadPaymentDataForMonth(parseInt(year), parseInt(month))
+    }
+    // También recargar meses disponibles
+    loadAvailableMonths()
+  }
 
   // Función para expandir/colapsar trabajadores
   const toggleWorkerExpansion = (workerName) => {
@@ -740,7 +726,7 @@ function Payments() {
               Cálculo automático de pagos basado en turnos completados y tarifas del calendario
             </p>
           </div>
-          <Button onClick={loadPaymentData} className="flex items-center gap-2">
+          <Button onClick={refreshCurrentData} className="flex items-center gap-2">
             <RefreshCw className="h-4 w-4" />
             Actualizar
           </Button>
@@ -797,7 +783,7 @@ function Payments() {
             <Download className="h-4 w-4" />
             Exportar a Excel
           </Button>
-          <Button onClick={loadPaymentData} className="flex items-center gap-2">
+          <Button onClick={refreshCurrentData} className="flex items-center gap-2">
             <RefreshCw className="h-4 w-4" />
             Actualizar
           </Button>

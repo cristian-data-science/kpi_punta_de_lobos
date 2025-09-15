@@ -182,11 +182,19 @@ const Dashboard = () => {
     else if (key === 'year') range = getCurrentYearRange()
 
     try {
-      let q = supabase.from('turnos').select('pago,cobro,estado,fecha')
-      if (range.start) q = q.gte('fecha', range.start)
-      if (range.end)   q = q.lte('fecha', range.end)
-      const { data, error } = await q
-      if (error) throw error
+      // Usar fetchPaged para obtener TODOS los registros sin límite de 1000
+      const buildFilter = (q) => {
+        let filteredQ = q
+        if (range.start) filteredQ = filteredQ.gte('fecha', range.start)
+        if (range.end)   filteredQ = filteredQ.lte('fecha', range.end)
+        return filteredQ
+      }
+
+      const { rows: data, _debug } = await fetchPaged({
+        table: 'turnos',
+        select: 'pago,cobro,estado,fecha',
+        buildFilter
+      })
 
       let totalCosts = 0, totalIncome = 0, processed = 0, completed = 0
       data?.forEach(r => {
@@ -201,7 +209,15 @@ const Dashboard = () => {
       const out = {
         totalIncome, totalCosts, margin, marginPercent,
         _range: { ...range },
-        _debug: { rows: processed, completed, totalRows: processed, incomeRows: data?.filter(r => r?.cobro && r.cobro > 0).length || 0, costRows: data?.filter(r => r?.pago && r.pago > 0).length || 0 }
+        _debug: { 
+          rows: processed, 
+          completed, 
+          totalRows: processed, 
+          incomeRows: data?.filter(r => r?.cobro && r.cobro > 0).length || 0, 
+          costRows: data?.filter(r => r?.pago && r.pago > 0).length || 0,
+          pages: _debug?.pages || 0,
+          paginationTotal: _debug?.total || 0
+        }
       }
       if (debug) console.log('💰 Financial:', out)
       return out

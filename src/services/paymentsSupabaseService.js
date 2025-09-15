@@ -181,6 +181,104 @@ class PaymentsSupabaseService {
   }
 
   /**
+   * 📅 Cargar turnos de un mes específico (SOLUCIONA PROBLEMA LÍMITE SUPABASE)
+   * Carga solo turnos de un año/mes específico para evitar límite 1000 registros
+   */
+  async loadTurnosForMonth(year, month) {
+    try {
+      // Calcular rango de fechas del mes
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+      const lastDay = new Date(year, month, 0).getDate() // Último día del mes
+      const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      
+      console.log(`📅 Cargando turnos para ${year}-${String(month).padStart(2, '0')} (${startDate} a ${endDate})`)
+
+      const { data: turnos, error } = await this.supabase
+        .from('turnos')
+        .select(`
+          *,
+          trabajador:trabajador_id (
+            id,
+            nombre,
+            rut
+          )
+        `)
+        .eq('estado', 'completado')
+        .gte('fecha', startDate)
+        .lte('fecha', endDate)
+        .order('fecha', { ascending: true })
+
+      if (error) throw error
+
+      // Transformar al formato esperado
+      const turnosTransformados = turnos.map(turno => ({
+        fecha: turno.fecha,
+        conductorNombre: turno.trabajador?.nombre || 'Trabajador no encontrado',
+        turno: this.mapTurnoType(turno.turno_tipo),
+        estado: turno.estado,
+        pago: turno.pago || 0
+      }))
+
+      console.log(`✅ Cargados ${turnosTransformados.length} turnos para ${year}-${month}`)
+      return turnosTransformados
+      
+    } catch (error) {
+      console.error(`❌ Error cargando turnos para ${year}-${month}:`, error)
+      return []
+    }
+  }
+
+  /**
+   * 📊 Obtener meses disponibles directamente de Supabase (QUERY LIGERA CON PAGINACIÓN)
+   * Solo extrae fechas sin datos completos para evitar límites
+   */
+  async getAvailableMonthsFromSupabase() {
+    try {
+      console.log('📊 Obteniendo meses disponibles desde Supabase...')
+      
+      // Usar paginación para obtener TODAS las fechas (no solo 1000)
+      let allFechas = []
+      let page = 0
+      const pageSize = 1000
+      let hasMore = true
+      
+      while (hasMore) {
+        const { data: fechas, error } = await this.supabase
+          .from('turnos')
+          .select('fecha')
+          .eq('estado', 'completado')
+          .order('fecha', { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1)
+
+        if (error) throw error
+
+        allFechas = allFechas.concat(fechas)
+        hasMore = fechas.length === pageSize
+        page++
+        
+        console.log(`📅 Página ${page}: ${fechas.length} fechas cargadas (total: ${allFechas.length})`)
+      }
+
+      // Extraer meses únicos
+      const monthsSet = new Set()
+      allFechas.forEach(row => {
+        const [year, month] = row.fecha.split('-')
+        monthsSet.add(`${year}-${month}`)
+      })
+
+      const availableMonths = Array.from(monthsSet).sort().reverse()
+      console.log(`✅ Meses disponibles: ${availableMonths.join(', ')}`)
+      console.log(`📊 Total fechas procesadas: ${allFechas.length}`)
+      
+      return availableMonths
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo meses disponibles:', error)
+      return []
+    }
+  }
+
+  /**
    * 🔄 Mapear tipos de turno de Supabase al formato legacy
    */
   mapTurnoType(turnoTipo) {
@@ -190,6 +288,112 @@ class PaymentsSupabaseService {
       'tercer_turno': 'TERCER TURNO'
     }
     return map[turnoTipo] || 'PRIMER TURNO'
+  }
+
+  /**
+   * 💰 Calcular pagos de trabajadores desde turnos ya cargados (OPTIMIZADO)
+   * Función específica para usar con datos de un mes específico
+   */
+  async calculateWorkerPaymentsFromTurnos(turnos) {
+    try {
+      if (turnos.length === 0) {
+        console.warn('⚠️ No hay turnos para calcular pagos')
+        return []
+      }
+
+      // 2. Obtener configuración de tarifas desde Supabase
+      const calendarConfig = await this.loadCalendarConfigFromSupabase()
+      
+      // Validación defensiva
+      if (!calendarConfig || !calendarConfig.holidays || !Array.isArray(calendarConfig.holidays)) {
+        console.warn('⚠️ Configuración de calendario corrupta, usando fallback')
+        return []
+      }
+
+      // 3. Procesar turnos y aplicar lógica de categorías
+      const turnosConCategorias = turnos.map(turno => {
+        const fecha = new Date(turno.fecha + 'T00:00:00.000Z')
+        const dayOfWeek = fecha.getUTCDay()
+        
+        // Verificar si es feriado (no domingo)
+        const isHoliday = calendarConfig.holidays.some(holiday => 
+          holiday.date === turno.fecha && !holiday.isSunday
+        )
+        
+        const isSunday = dayOfWeek === 0
+        const isSaturday = dayOfWeek === 6
+        
+        let categoriasDia = 'Días normales'
+        if (isSunday) {
+          categoriasDia = 'Domingos'
+        } else if (isHoliday) {
+          categoriasDia = 'Feriados'
+        } else if (isSaturday) {
+          categoriasDia = 'Sábados'
+        }
+        
+        return {
+          ...turno,
+          isHoliday,
+          isSunday,
+          isSaturday,
+          categoriasDia,
+          // 💰 USAR VALOR HISTÓRICO del campo 'pago' (NO recalcular)
+          tarifa: turno.pago || 0  // 'pago' es el valor guardado en BD
+        }
+      })
+
+      // 4. Agrupar por trabajador
+      const trabajadoresMap = new Map()
+      
+      turnosConCategorias.forEach(turno => {
+        if (!trabajadoresMap.has(turno.conductorNombre)) {
+          trabajadoresMap.set(turno.conductorNombre, {
+            nombre: turno.conductorNombre,
+            conductorNombre: turno.conductorNombre, // 🔧 AGREGAR: Campo requerido para UI
+            turnos: [],
+            totalTurnos: 0,
+            totalMonto: 0,
+            feriadosTrabajados: 0,
+            domingosTrabajados: 0,
+            desglosePorTipo: {},
+            desglosePorDia: {}
+          })
+        }
+
+        const worker = trabajadoresMap.get(turno.conductorNombre)
+        worker.turnos.push(turno)
+        worker.totalTurnos++
+        worker.totalMonto += turno.tarifa
+
+        // Contadores específicos
+        if (turno.isHoliday && !turno.isSunday) worker.feriadosTrabajados++
+        if (turno.isSunday) worker.domingosTrabajados++
+
+        // Desglose por tipo de turno
+        if (!worker.desglosePorTipo[turno.turno]) {
+          worker.desglosePorTipo[turno.turno] = { cantidad: 0, monto: 0 }
+        }
+        worker.desglosePorTipo[turno.turno].cantidad++
+        worker.desglosePorTipo[turno.turno].monto += turno.tarifa
+
+        // Desglose por tipo de día
+        if (!worker.desglosePorDia[turno.categoriasDia]) {
+          worker.desglosePorDia[turno.categoriasDia] = { cantidad: 0, monto: 0 }
+        }
+        worker.desglosePorDia[turno.categoriasDia].cantidad++
+        worker.desglosePorDia[turno.categoriasDia].monto += turno.tarifa
+      })
+
+      const resultado = Array.from(trabajadoresMap.values())
+      console.log(`💰 Pagos calculados desde turnos: ${resultado.length} trabajadores`)
+      
+      return resultado
+      
+    } catch (error) {
+      console.error('❌ Error calculando pagos desde turnos:', error)
+      return []
+    }
   }
 
   /**
