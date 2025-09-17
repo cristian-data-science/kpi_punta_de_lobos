@@ -47,7 +47,48 @@ Layout (Header + Sidebar + Outlet)
 │   ├── Workers: Complete CRUD with RUT validation, create/edit/delete, status management
 │   ├── Cobros: Shift-based billing with weekly/monthly filtering and configurable rates
 │   └── Payments: Total/Monthly filtering with date validation warnings
-├── UploadFiles (CSV import functionality)
+├── UploadFiles (Excel import functionality with intelligent validation)
+├── Calendar (shift management with rate calculations)
+├── GuiaUso (interactive user documentation system)
+└── Settings (configuration)
+```
+
+### Interactive Documentation System (NEW - COMPLETED)
+**Location**: `src/pages/GuiaUso.jsx` (1035+ lines) - Complete interactive user manual for business users
+**Purpose**: Replace technical documentation with user-friendly business-oriented guide
+
+#### Core Features Implemented
+- **Interactive Navigation**: Horizontal card-based navigation replacing sidebar for space optimization
+- **Real-time Search**: Filter content across all sections and subsections
+- **Markdown Rendering**: Custom `renderInlineText()` and `renderContent()` functions for proper **bold** text formatting
+- **Responsive Accordions**: Expandable sections with visual feedback and state management
+- **Professional Layout**: Optimized for business users transitioning from Excel workflows
+
+#### Content Structure (9 Main Sections)
+- **Bienvenido**: System overview and recommended workflow
+- **Dashboard**: Executive metrics and intelligent filtering system
+- **Trabajadores**: Worker management with RUT validation
+- **Turnos**: Shift scheduling with calendar integration
+- **Tarifas**: Centralized rate configuration
+- **Cobros**: Weekly billing with Excel export
+- **Pagos**: Monthly payroll calculations
+- **Importación de Planillas Excel**: Updated Excel import process (was CSV)
+- **Detección de Inconsistencias**: Automated data validation
+- **Solución de Problemas**: Troubleshooting guide
+- **Migración desde Excel**: Step-by-step migration planning
+
+#### Technical Implementation
+- **Layout Optimization**: Horizontal navigation maximizes content space vs previous sidebar
+- **Markdown Processing**: Advanced text formatting with inline **bold** processing
+- **Search Engine**: Real-time filtering across all documentation content
+- **State Management**: Accordion expansion/collapse with localStorage persistence
+- **Component Integration**: Seamless integration with existing TransApp navigation
+
+#### Content Updates Made
+- **Removed Sections**: Eliminated "Acceso al Sistema", "Configuración del Sistema", "Acceso Móvil"
+- **Updated Import Module**: Changed from CSV to Excel import process with real validation modes
+- **Business Language**: Non-technical language focused on end-user workflows
+- **Updated Process Flow**: Reflects actual Excel-based import with intelligent worker mapping
 ├── Calendar (shift management with rate calculations)
 └── Settings (configuration)
 ```
@@ -447,11 +488,13 @@ const handler = (filter) => { /* nueva función en cada render */ }
 - **Responsive**: Mobile-first with `use-mobile.js` hook
 - **shadcn/ui**: Pre-built components in `src/components/ui/`
 
-### Data Validation & CSV Import
-- CSV parsing in `src/utils/csvUtils.js` with specific validators
-- Required fields per entity type (workers, vehicles, routes)
-- Example: Workers CSV needs `['nombre', 'rut', 'cargo', 'telefono']`
-- **Excel Integration**: ExcelJS for advanced export with professional formatting
+### Data Validation & Excel Import
+- **Excel Processing**: XLSX.js for reading Excel files (.xlsx, .xls) in `src/pages/UploadFiles.jsx`
+- **Intelligent Validation**: `excelValidationService.js` with 4 modes (standard, permissive, strict, legacy)
+- **Worker Mapping**: Automatic name similarity matching with manual override capabilities  
+- **Real-time Processing**: Validates dates, formats, and worker assignments during import
+- **Smart Error Handling**: Provides detailed feedback and correction suggestions
+- **ExcelJS Integration**: Advanced export functionality with professional formatting
 
 ## Key Development Commands
 
