@@ -9,9 +9,9 @@ import {
   Receipt,
   DollarSign, 
   Calendar,
-  Settings,
   AlertTriangle,
-  X
+  X,
+  BookOpen
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import inconsistenciesService from '@/services/inconsistenciesService'
@@ -114,10 +114,10 @@ const Sidebar = ({ isOpen, onClose }) => {
       description: 'Turnos y tarifas'
     },
     { 
-      path: '/settings', 
-      icon: Settings, 
-      label: 'Configuración',
-      description: 'Ajustes del sistema'
+      path: '/guia-uso', 
+      icon: BookOpen, 
+      label: 'Guía de uso',
+      description: 'Manual interactivo completo'
     }
   ]
 
@@ -144,8 +144,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           </Button>
         </div>
         
-        <nav className="p-4 space-y-2 mt-16 lg:mt-4">
-          {menuItems.map((item) => {
+        <nav className="p-4 space-y-2 mt-16 lg:mt-4 h-full overflow-y-auto pb-24">
+          {menuItems.map((item, index) => {
             const Icon = item.icon
             return (
               <NavLink

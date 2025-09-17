@@ -681,7 +681,7 @@ function Payments() {
         from: 'A3',
         to: `G${rowIndex + 3}`
       }
-
+ 
       // Generar nombre de archivo dinámico
       const fileName = selectedMonth 
         ? `Pagos_${selectedMonth}_${new Date().toLocaleDateString('es-CL').replace(/\//g, '-')}.xlsx`

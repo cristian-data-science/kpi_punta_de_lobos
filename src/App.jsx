@@ -11,7 +11,7 @@ import Cobros from './pages/Cobros'
 import Payments from './pages/Payments'
 import Inconsistencies from './pages/Inconsistencies'
 import Calendar from './pages/Calendar'
-import Settings from './pages/Settings'
+import GuiaUso from './pages/GuiaUso'
 import { Truck } from 'lucide-react'
 import './App.css'
 
@@ -59,7 +59,7 @@ const AppRoutes = () => {
         <Route path="payments" element={<Payments />} />
         <Route path="inconsistencies" element={<Inconsistencies />} />
         <Route path="calendar" element={<Calendar />} />
-        <Route path="settings" element={<Settings />} />
+        <Route path="guia-uso" element={<GuiaUso />} />
       </Route>
     </Routes>
   )
