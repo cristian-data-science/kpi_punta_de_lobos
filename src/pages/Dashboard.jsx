@@ -28,6 +28,7 @@ import {
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { getSupabaseClient } from '@/services/supabaseClient'
 import ReactECharts from 'echarts-for-react'
+import * as echarts from 'echarts'
 
 const PAGE_SIZE = 1000
 
@@ -112,6 +113,8 @@ const Dashboard = () => {
     trends: { daily: [], weekly: [], _range: {start:null,end:null}, _debug: {} },
     topWorkers: [],
     topWorkersRangeMeta: { start: null, end: null, _debug: {} },
+    monthlyIncome: [], // Últimos 6 meses de ingresos (cobros)
+    monthlyCosts: [],  // Últimos 6 meses de costos (pagos)
     shiftDistribution: [],
     alerts: [],
     loading: true
@@ -322,16 +325,92 @@ const Dashboard = () => {
     return { top, meta }
   }
 
+  // Datos mensuales últimos 6 meses (ingresos y costos)
+  const loadLast6MonthsData = async () => {
+    const months = []
+    const today = new Date()
+    
+    // Generar últimos 6 meses
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(today.getFullYear(), today.getMonth() - i, 1)
+      const year = date.getFullYear()
+      const month = date.getMonth()
+      months.push({
+        year,
+        month,
+        monthName: date.toLocaleDateString('es-CL', { month: 'short', year: 'numeric' }),
+        start: startOfMonth(year, month),
+        end: endOfMonth(year, month)
+      })
+    }
+
+    const monthlyData = []
+    
+    for (const monthInfo of months) {
+      const buildFilter = (q) => {
+        return q
+          .eq('estado', 'completado')
+          .gte('fecha', monthInfo.start)
+          .lte('fecha', monthInfo.end)
+      }
+
+      try {
+        const { rows, _debug } = await fetchPaged({
+          table: 'turnos',
+          select: 'pago,cobro,fecha',
+          buildFilter
+        })
+
+        const totalIncome = rows.reduce((sum, r) => sum + (r?.cobro || 0), 0)
+        const totalCosts = rows.reduce((sum, r) => sum + (r?.pago || 0), 0)
+
+        monthlyData.push({
+          month: monthInfo.monthName,
+          income: totalIncome,
+          costs: totalCosts,
+          margin: totalIncome - totalCosts,
+          shifts: rows.length,
+          _debug: { ..._debug, monthInfo }
+        })
+
+        if (debug) console.log(`📊 Mes ${monthInfo.monthName}:`, {
+          income: fmtCL(totalIncome),
+          costs: fmtCL(totalCosts),
+          shifts: rows.length
+        })
+      } catch (error) {
+        console.error(`Error cargando datos del mes ${monthInfo.monthName}:`, error)
+        monthlyData.push({
+          month: monthInfo.monthName,
+          income: 0,
+          costs: 0,
+          margin: 0,
+          shifts: 0,
+          error: error.message
+        })
+      }
+    }
+
+    if (debug) console.log('📊 Últimos 6 meses:', monthlyData)
+    return monthlyData
+  }
+
   // ---------- Effects ----------
 
   useEffect(() => {
     const init = async () => {
       setDashboardData(prev => ({ ...prev, loading: true }))
-      const [workers, shifts] = await Promise.all([loadWorkersData(), loadShiftsData()])
+      const [workers, shifts, monthlyData] = await Promise.all([
+        loadWorkersData(), 
+        loadShiftsData(), 
+        loadLast6MonthsData()
+      ])
       setDashboardData(prev => ({
         ...prev,
         workers,
         shifts,
+        monthlyIncome: monthlyData,
+        monthlyCosts: monthlyData, // Same data, different visualization
         shiftDistribution: calculateShiftDistribution(shifts),
         alerts: generateAlerts(workers, shifts, prev.financial),
         loading: false
@@ -459,6 +538,104 @@ const Dashboard = () => {
       }]
     }
   }, [dashboardData.shiftDistribution])
+
+  // Gráfico de barras - Ingresos últimos 6 meses
+  const monthlyIncomeOption = useMemo(() => {
+    if (!dashboardData.monthlyIncome?.length) return null
+    return {
+      title: {
+        text: 'Ingresos Últimos 6 Meses',
+        textStyle: { color: '#374151', fontSize: 16, fontWeight: 'bold' },
+        left: 'center'
+      },
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        textStyle: { color: '#fff' },
+        formatter: (params) => {
+          const data = params[0]
+          return `<div style="font-weight: bold; margin-bottom: 8px;">${data.name}</div>
+                  <div style="color: #10b981;">• Ingresos: ${fmtCL(data.value)}</div>
+                  <div style="color: #64748b;">• Turnos: ${dashboardData.monthlyIncome[data.dataIndex]?.shifts || 0}</div>`
+        }
+      },
+      grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
+      xAxis: {
+        type: 'category',
+        data: dashboardData.monthlyIncome.map(d => d.month),
+        axisLine: { lineStyle: { color: '#e5e7eb' } },
+        axisLabel: { color: '#6b7280', fontSize: 11 }
+      },
+      yAxis: {
+        type: 'value',
+        axisLine: { lineStyle: { color: '#e5e7eb' } },
+        axisLabel: { color: '#6b7280', formatter: (value) => `$${(value/1000000).toFixed(1)}M` },
+        splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+      },
+      series: [{
+        type: 'bar',
+        data: dashboardData.monthlyIncome.map(d => d.income),
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#10b981' },
+            { offset: 1, color: '#059669' }
+          ])
+        },
+        emphasis: {
+          itemStyle: { color: '#047857' }
+        }
+      }]
+    }
+  }, [dashboardData.monthlyIncome])
+
+  // Gráfico de barras - Costos últimos 6 meses  
+  const monthlyCostsOption = useMemo(() => {
+    if (!dashboardData.monthlyCosts?.length) return null
+    return {
+      title: {
+        text: 'Costos Últimos 6 Meses',
+        textStyle: { color: '#374151', fontSize: 16, fontWeight: 'bold' },
+        left: 'center'
+      },
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        textStyle: { color: '#fff' },
+        formatter: (params) => {
+          const data = params[0]
+          return `<div style="font-weight: bold; margin-bottom: 8px;">${data.name}</div>
+                  <div style="color: #ef4444;">• Costos: ${fmtCL(data.value)}</div>
+                  <div style="color: #64748b;">• Turnos: ${dashboardData.monthlyCosts[data.dataIndex]?.shifts || 0}</div>`
+        }
+      },
+      grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
+      xAxis: {
+        type: 'category',
+        data: dashboardData.monthlyCosts.map(d => d.month),
+        axisLine: { lineStyle: { color: '#e5e7eb' } },
+        axisLabel: { color: '#6b7280', fontSize: 11 }
+      },
+      yAxis: {
+        type: 'value',
+        axisLine: { lineStyle: { color: '#e5e7eb' } },
+        axisLabel: { color: '#6b7280', formatter: (value) => `$${(value/1000000).toFixed(1)}M` },
+        splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+      },
+      series: [{
+        type: 'bar',
+        data: dashboardData.monthlyCosts.map(d => d.costs),
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#ef4444' },
+            { offset: 1, color: '#dc2626' }
+          ])
+        },
+        emphasis: {
+          itemStyle: { color: '#b91c1c' }
+        }
+      }]
+    }
+  }, [dashboardData.monthlyCosts])
 
   // ---------- UI ----------
 
@@ -956,6 +1133,59 @@ const Dashboard = () => {
         </Card>
       </div>
 
+      {/* Gráficos de Barras - Últimos 6 Meses */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Ingresos Mensuales */}
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-green-600" />
+              Ingresos por Mes
+            </CardTitle>
+            <CardDescription>Evolución de ingresos últimos 6 meses</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              {dashboardData.monthlyIncome?.length > 0 && monthlyIncomeOption ? (
+                <ReactECharts option={monthlyIncomeOption} style={{ height: '100%', width: '100%' }} opts={{ renderer: 'svg' }} />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Cargando datos de ingresos...</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Costos Mensuales */}
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-red-600" />
+              Costos por Mes
+            </CardTitle>
+            <CardDescription>Evolución de costos últimos 6 meses</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              {dashboardData.monthlyCosts?.length > 0 && monthlyCostsOption ? (
+                <ReactECharts option={monthlyCostsOption} style={{ height: '100%', width: '100%' }} opts={{ renderer: 'svg' }} />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Cargando datos de costos...</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Footer */}
       <Card className="bg-gradient-to-r from-gray-50 via-blue-50 to-orange-50 border-0">
         <CardContent className="p-6">
@@ -991,6 +1221,8 @@ const Dashboard = () => {
           {debug ? 'Ocultar' : 'Debug'}
         </button>
       </div>
+
+
 
       {/* Debug panel global (fácil de quitar) */}
       {debug && (
