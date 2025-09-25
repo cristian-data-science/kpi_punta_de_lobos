@@ -14,8 +14,8 @@ export const LOGIN_CONFIG = {
   showAttemptsRemaining: true   // Mostrar intentos restantes al usuario
 }
 
-// Configuración de credenciales (mantener existente)
+// 🔐 Configuración de credenciales desde variables de entorno
 export const VALID_CREDENTIALS = {
-  username: 'admin',
-  password: 'transapp123'
+  username: import.meta.env.VITE_ADMIN_USERNAME || 'admin',
+  password: import.meta.env.VITE_ADMIN_PASSWORD || 'transapp123'
 }

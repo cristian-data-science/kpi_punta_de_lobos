@@ -9,9 +9,16 @@
 
 const { createClient } = require('@supabase/supabase-js')
 
-// Configuración de Supabase usando variables de entorno
-const supabaseUrl = process.env.SUPABASE_URL || 'https://csqxopqlgujduhmwxixo.supabase.co'
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzcXhvcHFsZ3VqZHVobXd4aXhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTczNTQ5MzMsImV4cCI6MjA3MjkzMDkzM30.zUiZNsHWFBIqH4KMNSyTE-g68f_t-rpdnpt7VNJ5DSs'
+// 🔐 Configuración de Supabase usando SOLO variables de entorno
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+
+// ⚠️ Validar que las credenciales estén configuradas
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ ERROR: Variables de entorno de Supabase no configuradas')
+  console.error('📋 Configura: SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY')
+  process.exit(1)
+}
 
 const supabase = createClient(supabaseUrl, supabaseKey)
 

@@ -1,0 +1,79 @@
+{
+  "mcpServers": {
+    "transapp-supabase": {
+      "command": "node",
+      "args": ["mcp/mcp-server-simple.cjs"],
+      "env": {
+        "SUPABASE_URL": "https://tu-proyecto.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "tu_service_role_key_aqui"
+      }
+    }
+  },
+  "project": {
+    "name": "TransApp",
+    "description": "Sistema de gestión de transporte con módulos de trabajadores, vehículos, turnos y pagos",
+    "version": "1.0.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/cristian-data-science/transapp"
+    },
+    "tools": {
+      "database": {
+        "enabled": true,
+        "provider": "supabase",
+        "features": ["CRUD", "real-time", "RLS"]
+      },
+      "authentication": {
+        "enabled": true,
+        "type": "custom"
+      },
+      "file-upload": {
+        "enabled": true,
+        "formats": ["xlsx", "xls"],
+        "maxSize": "10MB"
+      }
+    },
+    "deployment": {
+      "platform": "vercel",
+      "environment": "production",
+      "url": "https://transapp-qjloxuf0s-cris-projects-245b6b28.vercel.app"
+    },
+    "security": {
+      "login_attempts": {
+        "enabled": true,
+        "max_attempts": 3,
+        "lockout_duration": 15
+      },
+      "data_encryption": {
+        "enabled": false,
+        "note": "TODO: Implement for personal data"
+      },
+      "backup": {
+        "enabled": false,
+        "note": "TODO: Implement automated backups"
+      }
+    }
+  },
+  "development": {
+    "setup": {
+      "steps": [
+        "1. Copia .env.example a .env.local",
+        "2. Completa las credenciales de Supabase",
+        "3. Configura las credenciales de admin",
+        "4. Ejecuta: pnpm install && pnpm dev"
+      ]
+    },
+    "testing": {
+      "database": "node test/verify-table-access.cjs",
+      "mcp": "node test/test-mcp.js",
+      "connection": "node test/setup-complete.js"
+    }
+  },
+  "instructions": [
+    "🔒 NUNCA subas credenciales reales al repositorio",
+    "📋 Usa .env.local para variables de entorno locales",
+    "🛡️ Cambia las credenciales por defecto en producción",
+    "⚠️ Verifica que RLS esté habilitado en Supabase",
+    "💾 Implementa sistema de backup antes de producción"
+  ]
+}
