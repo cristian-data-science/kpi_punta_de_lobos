@@ -6,10 +6,16 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config({ path: '.env.local' });
 
 // Configuración de Supabase (usando variables de entorno)
-const supabaseUrl = process.env.SUPABASE_URL || 'https://csqxopqlgujduhmwxixo.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzcXhvcHFsZ3VqZHVobXd4aXhvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcyNTk5NDQ3NCwiZXhwIjoyMDQxNTcwNDc0fQ.wCBBZ4D9cPuU2aPG4U8j-4sNBJdFhSC4w2l4T_YQJ-E';
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ ERROR: SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son requeridos en .env.local');
+  process.exit(1);
+}
 
 async function testPaymentCalculation() {
   console.log('🧪 Probando cálculo de pagos con campo "pago" guardado...\n');

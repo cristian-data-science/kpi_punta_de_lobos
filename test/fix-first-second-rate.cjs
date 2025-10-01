@@ -1,9 +1,15 @@
 const { createClient } = require('@supabase/supabase-js')
+require('dotenv').config({ path: '.env.local' })
 
-const supabase = createClient(
-  'https://csqxopqlgujduhmwxixo.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzcXhvcHFsZ3VqZHVobXd4aXhvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NzM1NDkzMywiZXhwIjoyMDcyOTMwOTMzfQ.sBQ9BHi7vLXXOCRYLUkBDWrlKxJCGNAzW-a0b2FTm4I'
-)
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ ERROR: SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son requeridos en .env.local')
+  process.exit(1)
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey)
 
 async function fixFirstSecondShiftRate() {
   console.log('🔧 Corrigiendo tarifa de primer y segundo turno...')

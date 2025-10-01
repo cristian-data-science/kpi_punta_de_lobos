@@ -3,11 +3,19 @@
  * Aplica las modificaciones de la tabla trabajadores en Supabase
  */
 
+require('dotenv').config({ path: '.env.local' })
 const { createClient } = require('@supabase/supabase-js')
 
-const supabaseUrl = 'https://csqxopqlgujduhmwxixo.supabase.co'
-// Necesitas usar la service role key para modificaciones DDL
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzcXhvcHFsZ3VqZHVobXd4aXhvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NzM1NDkzMywiZXhwIjoyMDcyOTMwOTMzfQ.xaD4D0VQy-L9k0d8GH8T33_-a6IiN9BQrxz5FsDNHnQ'
+const supabaseUrl = process.env.VITE_SUPABASE_URL
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !serviceRoleKey) {
+  console.error('❌ ERROR: Faltan variables de entorno requeridas')
+  console.error('Por favor configura en .env.local:')
+  console.error('  - VITE_SUPABASE_URL')
+  console.error('  - SUPABASE_SERVICE_ROLE_KEY')
+  process.exit(1)
+}
 
 const supabase = createClient(supabaseUrl, serviceRoleKey)
 

@@ -1,8 +1,14 @@
 const { createClient } = require('@supabase/supabase-js')
+require('dotenv').config({ path: '.env.local' })
 
 // Configuración de Supabase
-const supabaseUrl = 'https://csqxopqlgujduhmwxixo.supabase.co'
-const supabaseServiceRoleKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzcXhvcHFsZ3VqZHVobXd4aXhvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NzM1NDkzMywiZXhwIjoyMDcyOTMwOTMzfQ.sKq7WvocXEyL9l5BcRsZOfJFnf9ZaRlOYL0acfUg5II'
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !supabaseServiceRoleKey) {
+  console.error('❌ ERROR: SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son requeridos en .env.local')
+  process.exit(1)
+}
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
