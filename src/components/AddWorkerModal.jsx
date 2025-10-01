@@ -70,9 +70,9 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
       newErrors.telefono = 'Teléfono debe tener al menos 8 dígitos';
     }
 
-    // Validar sueldo_base (opcional)
-    if (formData.sueldo_base && isNaN(parseFloat(formData.sueldo_base))) {
-      newErrors.sueldo_base = 'Sueldo debe ser un número válido';
+    // Validar sueldo_base (opcional, debe ser entero)
+    if (formData.sueldo_base && isNaN(parseInt(formData.sueldo_base))) {
+      newErrors.sueldo_base = 'Sueldo debe ser un número entero válido';
     }
 
     // Validar dias_trabajados
@@ -121,7 +121,9 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
         ...formData,
         rut: normalizeRut(formData.rut), // Guardar RUT limpio
         nombre: formData.nombre.trim().toUpperCase(), // Asegurar que se guarde en MAYÚSCULAS
-        telefono: formData.telefono.trim()
+        telefono: formData.telefono.trim(),
+        sueldo_base: formData.sueldo_base ? parseInt(formData.sueldo_base) : 0,
+        dias_trabajados: parseInt(formData.dias_trabajados)
       };
 
       await onSave(workerData);
@@ -245,9 +247,12 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               <option value="fijo">Fijo</option>
-              <option value="eventual">Eventual</option>
               <option value="planta">Planta</option>
+              <option value="eventual">Eventual</option>
             </select>
+            <p className="text-xs text-gray-500">
+              💡 Fijo y Planta funcionan igual, solo cambia la etiqueta
+            </p>
           </div>
 
           {/* Estado */}
@@ -262,8 +267,119 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
             >
               <option value="activo">Activo</option>
               <option value="inactivo">Inactivo</option>
+              <option value="licencia">Licencia</option>
+              <option value="vacaciones">Vacaciones</option>
             </select>
           </div>
+
+          {/* Sueldo Base (solo para contratos planta y fijo) */}
+          {(formData.contrato === 'planta' || formData.contrato === 'fijo') && (
+            <div className="space-y-2">
+              <Label htmlFor="sueldo_base">
+                Sueldo Base (CLP)
+              </Label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="sueldo_base"
+                  type="number"
+                  value={formData.sueldo_base}
+                  onChange={(e) => handleInputChange('sueldo_base', e.target.value)}
+                  placeholder="Ej: 500000"
+                  step="1000"
+                  min="0"
+                  disabled={isSaving}
+                  className={`pl-10 ${errors.sueldo_base ? 'border-red-500' : ''}`}
+                />
+              </div>
+              {errors.sueldo_base && (
+                <p className="text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {errors.sueldo_base}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Días Trabajados (solo para contratos planta y fijo) */}
+          {(formData.contrato === 'planta' || formData.contrato === 'fijo') && (
+            <div className="space-y-2">
+              <Label htmlFor="dias_trabajados">
+                Días Trabajados <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="dias_trabajados"
+                  type="number"
+                  value={formData.dias_trabajados}
+                  onChange={(e) => handleInputChange('dias_trabajados', e.target.value)}
+                  placeholder="30"
+                  min="1"
+                  max="31"
+                  disabled={isSaving}
+                  className={`pl-10 ${errors.dias_trabajados ? 'border-red-500' : ''}`}
+                />
+              </div>
+              {errors.dias_trabajados && (
+                <p className="text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {errors.dias_trabajados}
+                </p>
+              )}
+              <p className="text-xs text-gray-500">
+                📅 El sueldo proporcional se calculará automáticamente en la base de datos
+              </p>
+            </div>
+          )}
+
+          {/* Mensaje para contratos eventuales */}
+          {formData.contrato === 'eventual' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-amber-800 mb-1">
+                    👷 Contrato Eventual
+                  </p>
+                  <p className="text-amber-700">
+                    Los trabajadores eventuales no tienen sueldo base ni días trabajados configurados.
+                    El sistema automáticamente establecerá estos valores en <strong>0</strong>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Preview del Sueldo Proporcional (solo para planta y fijo) */}
+          {(formData.contrato === 'planta' || formData.contrato === 'fijo') && formData.sueldo_base && formData.dias_trabajados && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-blue-900">
+                  💰 Sueldo Proporcional:
+                </span>
+                <span className="text-lg font-bold text-blue-700">
+                  ${Math.round(
+                    parseInt(formData.sueldo_base || 0) * 
+                    (parseInt(formData.dias_trabajados || 30) / 30)
+                  ).toLocaleString('es-CL')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-blue-700">
+                <span>Porcentaje:</span>
+                <span className="font-semibold">
+                  {((parseInt(formData.dias_trabajados || 30) / 30) * 100).toFixed(0)}% del sueldo base
+                </span>
+              </div>
+              <div className="text-xs text-blue-600 bg-blue-100 rounded px-2 py-1">
+                📊 Fórmula: ${parseInt(formData.sueldo_base || 0).toLocaleString('es-CL')} × ({parseInt(formData.dias_trabajados || 30)}/30)
+              </div>
+              <div className="text-xs text-blue-500 mt-2 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                Este cálculo se realizará automáticamente en la base de datos al guardar
+              </div>
+            </div>
+          )}
 
           {/* Botones */}
           <div className="flex gap-3 pt-4">

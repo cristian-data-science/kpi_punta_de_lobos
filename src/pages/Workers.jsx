@@ -18,7 +18,8 @@ import {
   RefreshCw,
   Trash2,
   AlertTriangle,
-  Upload
+  Upload,
+  DollarSign
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { getSupabaseClient } from '../services/supabaseClient.js'
@@ -39,6 +40,9 @@ const Workers = () => {
   const [workerToDelete, setWorkerToDelete] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
+  const [showBulkSalaryModal, setShowBulkSalaryModal] = useState(false)
+  const [bulkSalary, setBulkSalary] = useState('')
+  const [isApplyingBulkSalary, setIsApplyingBulkSalary] = useState(false)
 
   // Conexión singleton de Supabase
   const supabase = getSupabaseClient()
@@ -109,7 +113,9 @@ const Workers = () => {
       nombre: worker.nombre,
       contrato: worker.contrato,
       telefono: worker.telefono || '',
-      estado: worker.estado
+      estado: worker.estado,
+      sueldo_base: worker.sueldo_base || 0,
+      dias_trabajados: worker.dias_trabajados || 30
     })
   }
 
@@ -125,7 +131,9 @@ const Workers = () => {
           nombre: editForm.nombre.toUpperCase(), // Asegurar que se guarde en MAYÚSCULAS
           contrato: editForm.contrato,
           telefono: editForm.telefono,
-          estado: editForm.estado
+          estado: editForm.estado,
+          sueldo_base: parseInt(editForm.sueldo_base) || 0,
+          dias_trabajados: parseInt(editForm.dias_trabajados) || 30
         })
         .eq('id', editingWorker)
         .select()
@@ -226,9 +234,14 @@ const Workers = () => {
       const newStatus = worker.estado === 'activo' ? 'inactivo' : 'activo'
       console.log('🔄 Cambiando estado del trabajador:', worker.nombre, 'a', newStatus)
       
+      // Si se desactiva, resetear valores de sueldo a 0
+      const updateData = newStatus === 'inactivo'
+        ? { estado: newStatus, sueldo_base: 0, dias_trabajados: 0, sueldo_proporcional: 0 }
+        : { estado: newStatus }
+      
       const { data, error } = await supabase
         .from('trabajadores')
-        .update({ estado: newStatus })
+        .update(updateData)
         .eq('id', worker.id)
         .select()
       
@@ -237,6 +250,9 @@ const Workers = () => {
       }
       
       console.log('✅ Estado actualizado:', data)
+      if (newStatus === 'inactivo') {
+        console.log('💰 Sueldos reseteados a 0 para trabajador inactivo')
+      }
       await loadWorkers()
     } catch (error) {
       console.error('❌ Error cambiando estado:', error)
@@ -287,6 +303,47 @@ const Workers = () => {
     })
   }
 
+  // Aplicar sueldo base masivo solo a trabajadores activos
+  const applyBulkSalary = async () => {
+    try {
+      setIsApplyingBulkSalary(true)
+      const salaryValue = parseInt(bulkSalary)
+      
+      if (isNaN(salaryValue) || salaryValue < 0) {
+        alert('Por favor ingresa un sueldo válido (número entero mayor o igual a 0)')
+        return
+      }
+
+      console.log('💰 Aplicando sueldo base masivo:', salaryValue, 'solo a trabajadores activos')
+      
+      // Actualizar solo trabajadores activos
+      const { data, error } = await supabase
+        .from('trabajadores')
+        .update({ sueldo_base: salaryValue })
+        .eq('estado', 'activo') // Solo trabajadores activos
+        .select()
+      
+      if (error) {
+        throw error
+      }
+      
+      console.log('✅ Sueldo base actualizado para', data?.length || 0, 'trabajadores activos')
+      
+      // Recargar datos y cerrar modal
+      await loadWorkers()
+      setShowBulkSalaryModal(false)
+      setBulkSalary('')
+      
+      // Mostrar mensaje de éxito
+      alert(`Sueldo base de $${salaryValue.toLocaleString('es-CL')} aplicado exitosamente a ${data?.length || 0} trabajadores activos`)
+    } catch (error) {
+      console.error('❌ Error aplicando sueldo masivo:', error)
+      alert('Error aplicando sueldo masivo: ' + error.message)
+    } finally {
+      setIsApplyingBulkSalary(false)
+    }
+  }
+
   // Limpiar filtros
   const clearFilters = () => {
     setSearchTerm('')
@@ -324,6 +381,15 @@ const Workers = () => {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            onClick={() => setShowBulkSalaryModal(true)}
+            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700"
+            disabled={loading || workers.length === 0}
+            title="Aplicar sueldo base a todos los trabajadores"
+          >
+            <DollarSign className="h-4 w-4" />
+            Aplicar Sueldo Base
+          </Button>
           <Button 
             onClick={() => setShowBulkUpload(true)}
             className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
@@ -442,9 +508,8 @@ const Workers = () => {
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">Todos los contratos</option>
-                <option value="fijo">Fijo</option>
-                <option value="eventual">Eventual</option>
                 <option value="planta">Planta</option>
+                <option value="eventual">Eventual</option>
               </select>
             </div>
 
@@ -460,6 +525,8 @@ const Workers = () => {
                 <option value="all">Todos los estados</option>
                 <option value="activo">Activo</option>
                 <option value="inactivo">Inactivo</option>
+                <option value="licencia">Licencia</option>
+                <option value="vacaciones">Vacaciones</option>
               </select>
             </div>
 
@@ -505,7 +572,9 @@ const Workers = () => {
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Nombre</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">RUT</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Contrato</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Teléfono</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Sueldo Base</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Días</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Sueldo Proporcional</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Estado</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Última Actualización</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Acciones</th>
@@ -538,12 +607,12 @@ const Workers = () => {
                             className="text-sm px-2 py-1 border rounded"
                           >
                             <option value="fijo">Fijo</option>
-                            <option value="eventual">Eventual</option>
                             <option value="planta">Planta</option>
+                            <option value="eventual">Eventual</option>
                           </select>
                         ) : (
                           <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                            worker.contrato === 'fijo' 
+                            worker.contrato === 'fijo'
                               ? 'bg-blue-50 text-blue-700 border border-blue-200'
                               : worker.contrato === 'planta'
                               ? 'bg-green-50 text-green-700 border border-green-200'
@@ -557,15 +626,71 @@ const Workers = () => {
                       <td className="py-3 px-4">
                         {editingWorker === worker.id ? (
                           <Input
-                            value={editForm.telefono}
-                            onChange={(e) => setEditForm({...editForm, telefono: e.target.value})}
-                            placeholder="Teléfono"
-                            className="text-sm"
+                            type="number"
+                            value={editForm.sueldo_base || ''}
+                            onChange={(e) => setEditForm({...editForm, sueldo_base: e.target.value})}
+                            placeholder="Sueldo"
+                            className="text-sm w-32"
+                            step="1000"
+                            min="0"
+                          />
+                        ) : (
+                          <div className="text-gray-900 font-medium">
+                            {worker.sueldo_base ? 
+                              `$${parseInt(worker.sueldo_base).toLocaleString('es-CL')}` : 
+                              <span className="text-gray-400 italic">$0</span>
+                            }
+                          </div>
+                        )}
+                      </td>
+                      
+                      <td className="py-3 px-4">
+                        {editingWorker === worker.id ? (
+                          <Input
+                            type="number"
+                            value={editForm.dias_trabajados || 30}
+                            onChange={(e) => setEditForm({...editForm, dias_trabajados: e.target.value})}
+                            className="text-sm w-16"
+                            min="1"
+                            max="31"
                           />
                         ) : (
                           <div className="text-gray-600">
-                            {worker.telefono || (
-                              <span className="text-gray-400 italic">Sin teléfono</span>
+                            {worker.dias_trabajados || 30}
+                          </div>
+                        )}
+                      </td>
+                      
+                      {/* Sueldo Proporcional desde BD con Preview en Tiempo Real */}
+                      <td className="py-3 px-4">
+                        {editingWorker === worker.id && (editForm.contrato === 'planta' || editForm.contrato === 'fijo') ? (
+                          <div>
+                            {/* Preview en tiempo real del cálculo */}
+                            <div className="text-sm font-semibold text-blue-600">
+                              ${Math.round((parseInt(editForm.sueldo_base) || 0) * ((parseInt(editForm.dias_trabajados) || 30) / 30)).toLocaleString('es-CL')}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {((parseInt(editForm.dias_trabajados) || 30) / 30 * 100).toFixed(0)}% del base
+                            </div>
+                          </div>
+                        ) : editingWorker === worker.id && editForm.contrato === 'eventual' ? (
+                          <div>
+                            <div className="text-sm font-semibold text-gray-400">
+                              $0
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              (Eventual: N/A)
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="text-sm font-semibold text-blue-600">
+                              ${(worker.sueldo_proporcional || 0).toLocaleString('es-CL')}
+                            </div>
+                            {worker.contrato === 'eventual' && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                (Eventual: N/A)
+                              </div>
                             )}
                           </div>
                         )}
@@ -580,11 +705,17 @@ const Workers = () => {
                           >
                             <option value="activo">Activo</option>
                             <option value="inactivo">Inactivo</option>
+                            <option value="licencia">Licencia</option>
+                            <option value="vacaciones">Vacaciones</option>
                           </select>
                         ) : (
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
                             worker.estado === 'activo'
                               ? 'bg-green-50 text-green-700 border border-green-200'
+                              : worker.estado === 'licencia'
+                              ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                              : worker.estado === 'vacaciones'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
                               : 'bg-red-50 text-red-700 border border-red-200'
                           }`}>
                             {worker.estado === 'activo' ? (
@@ -755,6 +886,122 @@ const Workers = () => {
                     <>
                       <Trash2 className="h-4 w-4 mr-2" />
                       Eliminar Permanentemente
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal para aplicar sueldo base masivo */}
+      {showBulkSalaryModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md bg-white shadow-2xl">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full">
+                  <DollarSign className="h-6 w-6 text-purple-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg text-purple-600">
+                    Aplicar Sueldo Base para Todos
+                  </CardTitle>
+                  <CardDescription>
+                    Establecer el mismo sueldo base para todos los trabajadores
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Información */}
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-purple-500 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm">
+                    <p className="font-medium text-purple-800 mb-1">
+                      ⚠️ Operación Masiva
+                    </p>
+                    <p className="text-purple-700">
+                      Esta acción aplicará el mismo sueldo base a{' '}
+                      <strong className="font-bold">{workers.length} trabajadores</strong>.
+                    </p>
+                    <p className="text-purple-700 mt-1">
+                      Los valores actuales serán reemplazados. Esta operación es <strong>inmediata</strong>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Input de sueldo */}
+              <div className="space-y-2">
+                <Label htmlFor="bulk-salary" className="text-base font-medium">
+                  Sueldo Base a Aplicar (CLP)
+                </Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Input
+                    id="bulk-salary"
+                    type="number"
+                    value={bulkSalary}
+                    onChange={(e) => setBulkSalary(e.target.value)}
+                    placeholder="Ej: 600000"
+                    step="10000"
+                    min="0"
+                    disabled={isApplyingBulkSalary}
+                    className="pl-10 text-lg"
+                    autoFocus
+                  />
+                </div>
+                <p className="text-sm text-gray-500">
+                  Ingresa el sueldo base mensual que se aplicará a todos los trabajadores
+                </p>
+              </div>
+
+              {/* Preview del sueldo */}
+              {bulkSalary && parseInt(bulkSalary) > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-green-900">
+                      Sueldo a aplicar:
+                    </span>
+                    <span className="text-xl font-bold text-green-700">
+                      ${parseInt(bulkSalary).toLocaleString('es-CL')}
+                    </span>
+                  </div>
+                  <div className="text-xs text-green-700 mt-1">
+                    Se aplicará a {workers.length} trabajadores
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowBulkSalaryModal(false)
+                    setBulkSalary('')
+                  }}
+                  disabled={isApplyingBulkSalary}
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={applyBulkSalary}
+                  disabled={isApplyingBulkSalary || !bulkSalary || parseInt(bulkSalary) < 0}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                >
+                  {isApplyingBulkSalary ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Aplicando...
+                    </>
+                  ) : (
+                    <>
+                      <DollarSign className="h-4 w-4 mr-2" />
+                      Aplicar a Todos
                     </>
                   )}
                 </Button>
