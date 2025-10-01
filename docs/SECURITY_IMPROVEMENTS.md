@@ -1,5 +1,39 @@
 # 🔒 MEJORAS DE SEGURIDAD IMPLEMENTADAS - TRANSAPP
 
+## 🚨 **INCIDENTE DE SEGURIDAD CRÍTICO - 01/10/2025**
+
+### **GitGuardian Alert: Service Role Key Exposed**
+- **Fecha**: 2025-10-01 19:35:27 UTC (7:35 PM)
+- **Commit comprometido**: `24ec3b1`
+- **Severidad**: CRÍTICA (acceso completo a base de datos)
+- **Detección**: GitGuardian automated security scanning
+- **Tiempo de exposición**: ~4 horas antes de remediación
+
+### **Claves Comprometidas**
+```
+⚠️ Service Role Keys expuestas en commit público:
+1. eyJhbG...FsDNHnQ (commit 24ec3b1) - test/apply-worker-payroll-migration.cjs
+2. eyJhbG...T_YQJ-E (commit anterior) - test/test-payment-calculation.cjs
+3. eyJhbG...m4I (commit anterior) - test/fix-first-second-rate.cjs
+4. eyJhbG...5II (múltiples archivos) - varios test scripts
+```
+
+### **Acción de Remediación Inmediata**
+✅ **Commit 3a9f49a**: "security: Remove hardcoded Supabase service_role keys from test scripts"
+- Corregidos 6 archivos test con credenciales hardcodeadas
+- Implementado dotenv con validación estricta
+- Añadido error handling con process.exit(1)
+
+🔐 **ACCIÓN PENDIENTE CRÍTICA**: 
+**DEBES ROTAR INMEDIATAMENTE la service_role key en Supabase Dashboard**
+1. Ir a: https://supabase.com/dashboard/project/csqxopqlgujduhmwxixo/settings/api
+2. Click "Reset" junto a "service_role key"
+3. Copiar nueva clave
+4. Actualizar `.env.local` con nueva clave
+5. Las claves antiguas quedarán inválidas automáticamente
+
+---
+
 ## ✅ **RIESGO CRÍTICO CORREGIDO: Credenciales Hardcodeadas**
 
 ### **Problema Anterior**
@@ -77,12 +111,71 @@ VITE_ADMIN_PASSWORD=transapp123
 | Riesgo Original | Estado Anterior | Estado Actual | Acción Realizada |
 |-----------------|-----------------|---------------|------------------|
 | **Credenciales Login Hardcodeadas** | 🔴 **CRÍTICO** | ✅ **MITIGADO** | Variables de entorno |
-| **Credenciales Supabase Hardcodeadas** | 🔴 **CRÍTICO** | ✅ **YA SEGURO** | Ya usaba variables |
+| **Service Role Keys en Test Scripts** | 🔴 **CRÍTICO** | ⚠️ **PARCIAL** | Keys removidas, **REQUIERE ROTACIÓN** |
+| **Credenciales Supabase Frontend** | � **SEGURO** | ✅ **SEGURO** | Ya usaba variables |
 | **Archivos Config Expuestos** | 🟠 **ALTO** | ✅ **PROTEGIDO** | .gitignore actualizado |
 
 ---
 
-## 🚀 **PRÓXIMAS RECOMENDACIONES PRIORITARIAS**
+## � **LECCIONES APRENDIDAS DEL INCIDENTE**
+
+### **Causa Raíz**
+- Uso de fallback operator `||` con valores hardcodeados en test scripts
+- Pattern inseguro: `process.env.KEY || 'hardcoded-value'`
+- Archivos test incluidos en commits sin review de seguridad
+
+### **Prevención Futura**
+
+#### **1. Patrón Seguro de Variables de Entorno**
+```javascript
+✅ CORRECTO - Validación estricta:
+require('dotenv').config({ path: '.env.local' })
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+if (!key) {
+  console.error('❌ ERROR: Variable requerida no encontrada')
+  process.exit(1)
+}
+
+❌ INCORRECTO - Fallback hardcodeado:
+const key = process.env.KEY || 'hardcoded-value'
+```
+
+#### **2. Pre-commit Hooks Recomendados**
+```bash
+# Instalar herramientas de detección de secretos
+npm install --save-dev husky lint-staged
+npm install -g git-secrets
+
+# Configurar git-secrets
+git secrets --install
+git secrets --register-aws
+git secrets --add 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
+```
+
+#### **3. Code Review Checklist**
+- [ ] Verificar NO hay cadenas que comiencen con `eyJ` (JWT tokens)
+- [ ] Verificar NO hay URLs de APIs con tokens en query params
+- [ ] Verificar NO hay fallbacks hardcodeados con `||` operator
+- [ ] Verificar archivos test usan dotenv correctamente
+- [ ] Verificar .env.local está en .gitignore
+
+#### **4. Testing de Seguridad**
+```bash
+# Buscar posibles secretos antes de commit
+grep -r "eyJ" --include="*.js" --include="*.cjs" --exclude-dir=node_modules
+grep -r "service_role" --include="*.js" --include="*.cjs"
+grep -r "SUPABASE.*=" --include="*.js" --include="*.cjs"
+```
+
+---
+
+## �🚀 **PRÓXIMAS RECOMENDACIONES PRIORITARIAS**
+
+### **PRIORIDAD 0 - URGENTE (PENDIENTE)**
+🚨 **ROTAR SERVICE_ROLE KEY EN SUPABASE**
+- Las claves en commit 24ec3b1 siguen siendo válidas
+- Cualquiera con acceso al historial de Git puede usarlas
+- DEBE hacerse antes de cualquier otro trabajo
 
 ### **PRIORIDAD 1 - CRÍTICA**
 ```sql
