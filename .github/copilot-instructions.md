@@ -164,6 +164,46 @@ Layout (Header + Sidebar + Outlet)
 - **Professional UI Design**: Modern table with search, filters, and status badges
 - **Safe Deletion System**: Permanent deletion only for inactive workers with confirmation dialogs
 - **Direct Supabase Connection**: Bypasses service layer issues, direct database operations
+- **Payroll System**: Complete salary management with automatic calculations and business rules
+
+### Payroll Management System (NEW - COMPLETED)
+**Database Fields**:
+- **sueldo_base**: Base monthly salary (INTEGER, CLP)
+- **dias_trabajados**: Days worked in month (INTEGER, 1-31, default 30)
+- **sueldo_proporcional**: Proportional salary calculated automatically (INTEGER)
+
+**Business Logic (Database Trigger)**:
+- **Trigger Function**: `calcular_sueldo_proporcional()` - PL/pgSQL function
+- **Trigger**: BEFORE INSERT OR UPDATE OF sueldo_base, dias_trabajados, contrato, estado
+- **Calculation Formula**: `ROUND(sueldo_base * (dias_trabajados / 30))`
+- **Contract Types**: Three options (fijo, planta, eventual)
+  - **Fijo/Planta + Activo**: Calculates proportional salary automatically
+  - **Eventual**: Always resets all salary fields to 0
+  - **Inactivo**: Always resets all salary fields to 0
+- **Automatic Reset**: When worker changes to inactive, all salary fields → 0
+
+**UI Features (Workers.jsx)**:
+- **Real-time Preview**: Instant calculation display while editing
+- **Preview Display**: Shows amount + percentage (e.g., "$400.000 - 67% del base")
+- **Bulk Salary Application**: "Aplicar Sueldo Base" button applies salary to all active workers only
+- **Status Management**: Deactivating worker automatically resets salary fields to 0
+- **Color-coded Badges**: 
+  - Fijo: Blue badge (bg-blue-50 text-blue-700)
+  - Planta: Green badge (bg-green-50 text-green-700)
+  - Eventual: Orange badge (bg-orange-50 text-orange-700)
+
+**Worker Creation Modal (AddWorkerModal.jsx)**:
+- **Three Contract Options**: Dropdown with fijo, planta, eventual
+- **Conditional Fields**: Salary fields only visible for fijo/planta (hidden for eventual)
+- **Tooltip Guidance**: "💡 Fijo y Planta funcionan igual, solo cambia la etiqueta"
+- **Real-time Preview**: Shows calculated proportional salary as user types
+- **Eventual Warning**: Amber box explaining values will be set to 0
+
+**SQL Migration Scripts**:
+- **step_by_step_migration.sql**: Safe step-by-step migration (185 lines)
+- **migration_complete.sql**: Complete migration in one execution (220 lines)
+- **add_sueldo_proporcional.sql**: Standalone script for proportional salary only (140 lines)
+- **Features**: ALTER TABLE, trigger creation, constraint updates, index creation, data initialization
 
 ### Worker Creation System
 - **AddWorkerModal Component** (`src/components/AddWorkerModal.jsx`): Complete modal form with validation
@@ -174,16 +214,19 @@ Layout (Header + Sidebar + Outlet)
 ### Worker Management Features
 - **Search & Filter**: Real-time search by name/RUT, filter by contract type and status
 - **Inline Editing**: Direct table editing with save/cancel functionality
-- **Status Management**: Activate/deactivate workers with visual status badges
+- **Status Management**: Activate/deactivate workers with visual status badges and automatic salary reset
 - **Professional Badges**: Color-coded contract and status indicators with proper contrast
 - **Safe Deletion**: Multi-layer confirmation system for permanent worker removal
+- **Bulk Operations**: Apply base salary to all active workers with one click
 
 ### Technical Implementation
-- **Direct Supabase Integration**: Uses `createClient` directly in Workers.jsx for reliability
+- **Direct Supabase Integration**: Uses `getSupabaseClient()` singleton for reliability
+- **Database Trigger**: Automatic calculation and validation at DB level
 - **Error Handling**: Comprehensive error management with user-friendly messages
 - **Loading States**: Visual feedback during all CRUD operations
 - **Form Validation**: Complete validation for all required fields with real-time feedback
 - **Modal System**: Professional modals with backdrop blur and smooth animations
+- **Business Rules**: Salary management respects worker status (active/inactive) and contract type
 
 ## Model Context Protocol (MCP) Integration
 
@@ -216,9 +259,12 @@ trabajadores table:
 - id (uuid, PK)
 - nombre (text)
 - rut (text, unique)  
-- contrato (text: 'fijo'|'eventual'|'planta') - ALL SET TO 'fijo'
+- contrato (text: 'fijo'|'planta'|'eventual')
 - telefono (text)
-- estado (text: 'activo'|'inactivo')
+- estado (text: 'activo'|'inactivo'|'licencia'|'vacaciones')
+- sueldo_base (integer, default 0) - Base monthly salary
+- dias_trabajados (integer, default 30) - Days worked in month
+- sueldo_proporcional (integer, default 0) - Calculated proportional salary
 - created_at, updated_at (timestamps)
 
 turnos table:
@@ -231,11 +277,12 @@ turnos table:
 ```
 
 ### Current Database State
-- **14 Workers**: All with "fijo" contracts (updated from "eventual")
+- **14 Workers**: Mixed contracts (fijo, planta, eventual) with payroll fields
 - **98+ Shifts**: Real shift data with proper worker relationships
 - **UUID PKs**: All tables use UUID primary keys
 - **RLS Enabled**: Row Level Security policies configured
-- **Indexed**: Optimized queries on rut, fecha, and relationship fields
+- **Indexed**: Optimized queries on rut, fecha, estado, contrato, and relationship fields
+- **Triggers**: Automatic salary calculation via calcular_sueldo_proporcional()
 
 ### MCP Configuration
 ```json
