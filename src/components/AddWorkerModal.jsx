@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, User, Phone, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, User, Phone, FileText, AlertCircle, CheckCircle, DollarSign, Calendar } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -14,8 +14,10 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
     nombre: '',
     rut: '',
     telefono: '',
-    contrato: 'fijo',
-    estado: 'activo'
+    contrato: 'planta',
+    estado: 'activo',
+    sueldo_base: '',
+    dias_trabajados: 30
   });
 
   const [rutValidation, setRutValidation] = useState({
@@ -34,8 +36,10 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
         nombre: '',
         rut: '',
         telefono: '',
-        contrato: 'fijo',
-        estado: 'activo'
+        contrato: 'planta',
+        estado: 'activo',
+        sueldo_base: '',
+        dias_trabajados: 30
       });
       setRutValidation({ isValid: false, message: '', canContinue: true });
       setErrors({});
@@ -64,6 +68,17 @@ const AddWorkerModal = ({ isOpen, onClose, onSave, isSaving = false }) => {
     // Validar teléfono (opcional pero si está, debe ser válido)
     if (formData.telefono.trim() && formData.telefono.trim().length < 8) {
       newErrors.telefono = 'Teléfono debe tener al menos 8 dígitos';
+    }
+
+    // Validar sueldo_base (opcional)
+    if (formData.sueldo_base && isNaN(parseFloat(formData.sueldo_base))) {
+      newErrors.sueldo_base = 'Sueldo debe ser un número válido';
+    }
+
+    // Validar dias_trabajados
+    const dias = parseInt(formData.dias_trabajados);
+    if (isNaN(dias) || dias < 1 || dias > 31) {
+      newErrors.dias_trabajados = 'Días debe ser entre 1 y 31';
     }
 
     setErrors(newErrors);

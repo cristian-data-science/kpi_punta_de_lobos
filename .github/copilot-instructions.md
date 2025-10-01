@@ -900,6 +900,10 @@ Each major directory now contains a README.md explaining:
 
 ### Key Technical Features
 - **Calendar Integration**: 7-day week view with proper date handling
+- **Week Number Display**: ISO 8601 week number in header (e.g., "Semana 37 (9 sept - 15 sept 2025)")
+  - Function: `getWeekNumber()` calculates week according to international standard
+  - Memoized: `weekNumber` variable optimized with useMemo for performance
+  - Format: Seamlessly integrated into `weekRange` variable
 - **Worker Selection**: Dropdown with formatted names and availability checking
 - **Shift Types**: primer_turno, segundo_turno, tercer_turno with rate calculations
 - **State Management**: Real-time UI updates with optimistic rendering

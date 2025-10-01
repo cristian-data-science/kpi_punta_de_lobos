@@ -33,6 +33,10 @@ const AddShiftModal = ({
   // Estado para alertas de validación
   const [validationAlerts, setValidationAlerts] = useState([])
   
+  // 🆕 NUEVO: Estado para warnings específicos por trabajador
+  // Estructura: { 'turnoType-workerId': [{ type, message }] }
+  const [workerWarnings, setWorkerWarnings] = useState({})
+  
   // Estado para todos los turnos (para validaciones de día siguiente)
   const [allTurnos, setAllTurnos] = useState([])
 
@@ -78,6 +82,19 @@ const AddShiftModal = ({
       loadAllTurnos() // Cargar todos los turnos para validaciones de día siguiente
     }
   }, [isOpen, selectedDate, existingShifts])
+
+  // 🆕 Limpiar y recalcular warnings cuando cambia la fecha seleccionada
+  useEffect(() => {
+    if (!selectedDate) return
+    
+    // Limpiar warnings existentes
+    setWorkerWarnings({})
+    
+    // Recalcular warnings para trabajadores ya asignados
+    if (Object.keys(shiftAssignments).length > 0) {
+      recalculateAllWarnings()
+    }
+  }, [selectedDate])
 
   // Cargar las tarifas actuales desde la base de datos (SOLO LECTURA)
   const loadCurrentRates = async () => {
@@ -196,10 +213,10 @@ const AddShiftModal = ({
     }
   }
 
-  // Validar reglas de día siguiente usando datos locales
+  // Validar reglas de día siguiente usando datos locales - MODO AVISO (no bloquea)
   const validateNextDayRulesLocal = (workerId, dateKey, shiftType) => {
     if (!turnosConfig.enforceRules || !turnosConfig.nextDayRules.enforceNextDayRule) {
-      return { valid: true, message: '' }
+      return { valid: true, warning: false, message: '' }
     }
     
     // Calcular fecha del día anterior
@@ -219,19 +236,17 @@ const AddShiftModal = ({
     if (had3rdShiftYesterday) {
       const allowedNextDay = turnosConfig.nextDayRules.after3rd || ['segundo_turno']
       if (!allowedNextDay.includes(shiftType)) {
-        const shiftNames = { 
-          'primer_turno': '1º Turno', 
-          'segundo_turno': '2º Turno', 
-          'tercer_turno': '3º Turno' 
-        }
+        // 🆕 CAMBIO: Ya no bloquea (valid: true), solo advierte
         return {
-          valid: false,
-          message: `El trabajador tuvo 3º turno ayer. Hoy solo puede tener: ${allowedNextDay.map(s => shiftNames[s]).join(', ')}`
+          valid: true,
+          warning: true,
+          warningType: 'continuous-shift',
+          message: 'Turno continuo / descanso insuficiente (tuvo 3º turno ayer)'
         }
       }
     }
     
-    return { valid: true, message: '' }
+    return { valid: true, warning: false, message: '' }
   }
 
   // Cargar asignaciones existentes y sus datos completos
@@ -345,34 +360,45 @@ const AddShiftModal = ({
     return calculateShiftRateInMemory(dateKey, turnoType)
   }
 
-  // Manejar selección/deselección de trabajador
+  // Manejar selección/deselección de trabajador - MODO AVISO (no bloquea)
   const handleWorkerToggle = (turnoType, workerId) => {
     setShiftAssignments(prev => {
       const currentAssignments = prev[turnoType] || []
       const isSelected = currentAssignments.includes(workerId)
       
       if (isSelected) {
-        // Deseleccionar trabajador
+        // Deseleccionar trabajador y limpiar sus warnings
+        const warningKey = `${turnoType}-${workerId}`
+        setWorkerWarnings(prevWarnings => {
+          const newWarnings = { ...prevWarnings }
+          delete newWarnings[warningKey]
+          return newWarnings
+        })
+        
         return {
           ...prev,
           [turnoType]: currentAssignments.filter(id => id !== workerId)
         }
       } else {
-        // Verificar límite máximo basado en configuración
+        // 🆕 PERMITIR ASIGNACIÓN - ya no hay bloqueos, solo warnings
+        const warnings = []
+        
+        // Detectar exceso de límite (ya no bloquea)
         const maxLimit = turnosConfig.shiftLimits?.[turnoType] || MAX_WORKERS_PER_SHIFT
         if (currentAssignments.length >= maxLimit) {
-          alert(`Máximo ${maxLimit} trabajadores por turno`)
-          return prev
+          warnings.push({
+            type: 'limit-exceeded',
+            message: `Excede el máximo configurado (${maxLimit})`
+          })
         }
         
-        // Verificar reglas de configuración si están activas
+        // Detectar combinación no recomendada (ya no bloquea)
         if (turnosConfig.enforceRules) {
           const isAssignedInOtherShift = Object.entries(prev).some(([type, assignments]) => 
             type !== turnoType && assignments.includes(workerId)
           )
           
           if (isAssignedInOtherShift) {
-            // Verificar si esta combinación está permitida
             const otherType = Object.entries(prev).find(([type, assignments]) => 
               type !== turnoType && assignments.includes(workerId)
             )[0]
@@ -387,29 +413,41 @@ const AddShiftModal = ({
             const otherShiftNum = shiftNumbers[otherType]
             const combination = `${Math.min(currentShiftNum, otherShiftNum)}_${Math.max(currentShiftNum, otherShiftNum)}`
             
-            // Solo bloquear si la combinación específicamente no está permitida
             if (turnosConfig.allowedCombinations[combination] === false) {
               const shiftNames = {
-                'primer_turno': '1º Turno',
-                'segundo_turno': '2º Turno',
-                'tercer_turno': '3º Turno'
+                'primer_turno': '1º',
+                'segundo_turno': '2º',
+                'tercer_turno': '3º'
               }
-              alert(`No se permite la combinación de ${shiftNames[otherType]} y ${shiftNames[turnoType]} para el mismo trabajador`)
-              return prev
+              warnings.push({
+                type: 'combination-not-recommended',
+                message: `Combinación de turnos no recomendada (${shiftNames[otherType]} + ${shiftNames[currentShiftNum]})`
+              })
             }
           }
           
-          // Verificar reglas de día siguiente
+          // Detectar turno continuo (ya no bloquea)
           if (turnosConfig.nextDayRules.enforceNextDayRule) {
             const nextDayValidation = validateNextDayRulesLocal(workerId, selectedDate.toISOString().split('T')[0], turnoType)
-            if (!nextDayValidation.valid) {
-              alert(nextDayValidation.message)
-              return prev
+            if (nextDayValidation.warning) {
+              warnings.push({
+                type: nextDayValidation.warningType,
+                message: nextDayValidation.message
+              })
             }
           }
         }
         
-        // Agregar trabajador
+        // Guardar warnings para este trabajador
+        if (warnings.length > 0) {
+          const warningKey = `${turnoType}-${workerId}`
+          setWorkerWarnings(prevWarnings => ({
+            ...prevWarnings,
+            [warningKey]: warnings
+          }))
+        }
+        
+        // Agregar trabajador (siempre se permite)
         return {
           ...prev,
           [turnoType]: [...currentAssignments, workerId]
@@ -423,52 +461,98 @@ const AddShiftModal = ({
     return shiftAssignments[turnoType]?.includes(workerId) || false
   }
 
-  // Verificar si un trabajador está deshabilitado basado en reglas de configuración
-  const isWorkerDisabled = (turnoType, workerId) => {
-    // Si no hay reglas activas, permitir cualquier asignación
-    if (!turnosConfig.enforceRules) return false
+  // 🆕 NUEVO: Obtener warnings para un trabajador específico (reemplaza isWorkerDisabled)
+  const getWorkerWarnings = (turnoType, workerId) => {
+    const warningKey = `${turnoType}-${workerId}`
+    return workerWarnings[warningKey] || []
+  }
+  
+  // Verificar si un trabajador tiene warnings
+  const hasWorkerWarnings = (turnoType, workerId) => {
+    const warnings = getWorkerWarnings(turnoType, workerId)
+    return warnings.length > 0
+  }
+
+  // 🆕 Recalcular todos los warnings para trabajadores ya asignados (cuando cambia fecha)
+  const recalculateAllWarnings = () => {
+    if (!selectedDate) return
     
-    // Verificar combinaciones permitidas
-    const otherAssignments = Object.entries(shiftAssignments).filter(([type]) => type !== turnoType)
+    const newWarnings = {}
+    const dateKey = selectedDate.toISOString().split('T')[0]
     
-    for (const [otherType, assignments] of otherAssignments) {
-      if (assignments.includes(workerId)) {
-        // Verificar si esta combinación está permitida
-        const shiftNumbers = {
-          'primer_turno': 1,
-          'segundo_turno': 2,
-          'tercer_turno': 3
+    // Recorrer todas las asignaciones actuales
+    Object.entries(shiftAssignments).forEach(([turnoType, workerIds]) => {
+      workerIds.forEach(workerId => {
+        const warnings = []
+        
+        // Detectar exceso de límite
+        const maxLimit = turnosConfig.shiftLimits?.[turnoType] || MAX_WORKERS_PER_SHIFT
+        const currentAssignments = shiftAssignments[turnoType] || []
+        if (currentAssignments.length > maxLimit) {
+          const position = currentAssignments.indexOf(workerId) + 1
+          if (position > maxLimit) {
+            warnings.push({
+              type: 'limit-exceeded',
+              message: `Excede el máximo configurado (${maxLimit})`
+            })
+          }
         }
         
-        const currentShiftNum = shiftNumbers[turnoType]
-        const otherShiftNum = shiftNumbers[otherType]
-        const combination = `${Math.min(currentShiftNum, otherShiftNum)}_${Math.max(currentShiftNum, otherShiftNum)}`
-        
-        // Si la combinación no está permitida, deshabilitar
-        if (turnosConfig.allowedCombinations[combination] === false) {
-          return true
+        // Detectar combinación no recomendada
+        if (turnosConfig.enforceRules) {
+          const isAssignedInOtherShift = Object.entries(shiftAssignments).some(([type, assignments]) => 
+            type !== turnoType && assignments.includes(workerId)
+          )
+          
+          if (isAssignedInOtherShift) {
+            const otherType = Object.entries(shiftAssignments).find(([type, assignments]) => 
+              type !== turnoType && assignments.includes(workerId)
+            )[0]
+            
+            const shiftNumbers = {
+              'primer_turno': 1,
+              'segundo_turno': 2,
+              'tercer_turno': 3
+            }
+            
+            const currentShiftNum = shiftNumbers[turnoType]
+            const otherShiftNum = shiftNumbers[otherType]
+            const combination = `${Math.min(currentShiftNum, otherShiftNum)}_${Math.max(currentShiftNum, otherShiftNum)}`
+            
+            if (turnosConfig.allowedCombinations[combination] === false) {
+              const shiftNames = {
+                'primer_turno': '1º',
+                'segundo_turno': '2º',
+                'tercer_turno': '3º'
+              }
+              warnings.push({
+                type: 'combination-not-recommended',
+                message: `Combinación de turnos no recomendada (${shiftNames[otherType]} + ${shiftNames[turnoType]})`
+              })
+            }
+          }
+          
+          // Detectar turno continuo - CRÍTICO: usar fecha actual
+          if (turnosConfig.nextDayRules.enforceNextDayRule) {
+            const nextDayValidation = validateNextDayRulesLocal(workerId, dateKey, turnoType)
+            if (nextDayValidation.warning) {
+              warnings.push({
+                type: nextDayValidation.warningType,
+                message: nextDayValidation.message
+              })
+            }
+          }
         }
-      }
-    }
+        
+        // Guardar warnings si hay alguno
+        if (warnings.length > 0) {
+          const warningKey = `${turnoType}-${workerId}`
+          newWarnings[warningKey] = warnings
+        }
+      })
+    })
     
-    // Verificar reglas de día siguiente
-    if (turnosConfig.nextDayRules.enforceNextDayRule) {
-      const nextDayValidation = validateNextDayRulesLocal(workerId, selectedDate.toISOString().split('T')[0], turnoType)
-      if (!nextDayValidation.valid) {
-        return true
-      }
-    }
-    
-    // Verificar límites por tipo de turno
-    const currentAssignments = shiftAssignments[turnoType] || []
-    const limit = turnosConfig.shiftLimits?.[turnoType] || 8
-    
-    // Si ya está en el límite y el trabajador no está asignado, deshabilitar
-    if (currentAssignments.length >= limit && !currentAssignments.includes(workerId)) {
-      return true
-    }
-    
-    return false
+    setWorkerWarnings(newWarnings)
   }
 
   // Obtener trabajador por ID
@@ -709,18 +793,19 @@ const AddShiftModal = ({
             </div>
 
             <div className="flex items-center gap-4">
-              {/* Información de tarifas */}
+              {/* Información de tarifas y sistema de avisos */}
               {selectedDate && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <div className="flex items-start gap-2">
                     <Users className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                     <div className="text-xs">
                       <p className="font-medium text-blue-800 mb-1">
-                        Información de Tarifas y Estados
+                        Información del Sistema
                       </p>
                       <div className="text-blue-700 space-y-0.5">
                         <p>• <strong>PROGRAMADO:</strong> Tarifas del sistema</p>
                         <p>• <strong>COMPLETADO:</strong> Pago real registrado</p>
+                        <p>• <strong>Avisos:</strong> Los avisos NO bloquean el guardado</p>
                         <p>• Usa "Eliminar todos" para borrar turnos</p>
                       </div>
                     </div>
@@ -728,27 +813,27 @@ const AddShiftModal = ({
                 </div>
               )}
 
-              {/* Alertas de validación */}
+              {/* Alertas de validación - MODO INFORMATIVO (no bloquea guardado) */}
               {validationAlerts.length > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 max-w-md">
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 max-w-md">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                    <AlertTriangle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
                     <div className="text-xs">
-                      <p className="font-medium text-yellow-800 mb-1">
-                        Alertas de Reglas de Turnos
+                      <p className="font-medium text-orange-800 mb-1">
+                        ⚠️ Avisos (no bloquean guardado)
                       </p>
-                      <div className="text-yellow-700 space-y-0.5">
+                      <div className="text-orange-700 space-y-0.5">
                         {validationAlerts.slice(0, 3).map(alert => (
                           <p key={alert.id} className="flex items-start gap-1">
-                            <span className={`font-bold ${alert.type === 'error' ? 'text-red-600' : 'text-yellow-600'}`}>
-                              {alert.type === 'error' ? '❌' : '⚠️'}
+                            <span className="font-bold text-orange-600">
+                              ⚠️
                             </span>
                             <span className="text-xs">{alert.message}</span>
                           </p>
                         ))}
                         {validationAlerts.length > 3 && (
-                          <p className="text-yellow-600 font-medium">
-                            ...y {validationAlerts.length - 3} alertas más
+                          <p className="text-orange-600 font-medium">
+                            ...y {validationAlerts.length - 3} avisos más
                           </p>
                         )}
                       </div>
@@ -844,41 +929,65 @@ const AddShiftModal = ({
                   <div className="space-y-2 max-h-80 overflow-y-auto">
                     {workers.map(worker => {
                       const isSelected = isWorkerSelected(turno.id, worker.id)
-                      const isDisabled = isWorkerDisabled(turno.id, worker.id)
+                      const warnings = getWorkerWarnings(turno.id, worker.id)
+                      const hasWarnings = warnings.length > 0
+                      
+                      // Determinar color de fondo según tipo de warning
+                      const getWarningBgColor = () => {
+                        if (!hasWarnings) return ''
+                        const warningTypes = warnings.map(w => w.type)
+                        if (warningTypes.includes('continuous-shift')) return 'bg-red-50 border-red-300'
+                        if (warningTypes.includes('combination-not-recommended')) return 'bg-orange-50 border-orange-300'
+                        if (warningTypes.includes('limit-exceeded')) return 'bg-yellow-50 border-yellow-300'
+                        return 'bg-yellow-50 border-yellow-300'
+                      }
 
                       return (
                         <div
                           key={`${turno.id}-${worker.id}-${selectedDate}`}
                           className={`
-                            flex items-center gap-3 p-2 rounded border
-                            ${isSelected ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'}
-                            ${isDisabled && !isSelected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                            flex items-center gap-3 p-2 rounded border cursor-pointer
+                            ${isSelected && !hasWarnings ? 'bg-blue-50 border-blue-200' : ''}
+                            ${isSelected && hasWarnings ? getWarningBgColor() : ''}
+                            ${!isSelected ? 'hover:bg-gray-50' : ''}
                           `}
-                          onClick={() => {
-                            const isCurrentlySelected = shiftAssignments[turno.id]?.includes(worker.id)
-                            // Permitir deseleccionar siempre, solo verificar disabled para seleccionar
-                            if (isCurrentlySelected || !isDisabled) {
-                              handleWorkerToggle(turno.id, worker.id)
-                            }
-                          }}
+                          onClick={() => handleWorkerToggle(turno.id, worker.id)}
+                          title={hasWarnings ? warnings.map(w => w.message).join(' | ') : ''}
                         >
                           <Checkbox
                             checked={isSelected}
-                            disabled={isDisabled && !isSelected} // Solo deshabilitar si no está seleccionado
-                            onChange={() => {
-                              // Permitir deseleccionar siempre
-                              if (isSelected || !isDisabled) {
-                                handleWorkerToggle(turno.id, worker.id)
-                              }
-                            }}
+                            onChange={() => handleWorkerToggle(turno.id, worker.id)}
                           />
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-gray-900 truncate">
-                              {formatWorkerName(worker.nombre)}
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-medium text-gray-900 truncate">
+                                {formatWorkerName(worker.nombre)}
+                              </div>
+                              {hasWarnings && (
+                                <AlertTriangle className="h-4 w-4 text-orange-500 flex-shrink-0" />
+                              )}
                             </div>
                             <div className="text-xs text-gray-500">
                               {worker.rut}
                             </div>
+                            {/* Mostrar warnings debajo del nombre */}
+                            {hasWarnings && (
+                              <div className="mt-1 space-y-0.5">
+                                {warnings.map((warning, idx) => (
+                                  <div 
+                                    key={idx} 
+                                    className={`text-xs font-medium ${
+                                      warning.type === 'continuous-shift' ? 'text-red-600' :
+                                      warning.type === 'combination-not-recommended' ? 'text-orange-600' :
+                                      warning.type === 'limit-exceeded' ? 'text-yellow-600' :
+                                      'text-yellow-600'
+                                    }`}
+                                  >
+                                    ⚠️ {warning.message}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           {isSelected && (
                             <div className="flex flex-col items-end">

@@ -577,6 +577,19 @@ const Turnos = () => {
     return days
   }
 
+  // Calcular número de semana ISO 8601
+  const getWeekNumber = (date) => {
+    const target = new Date(date.valueOf())
+    const dayNr = (date.getDay() + 6) % 7
+    target.setDate(target.getDate() - dayNr + 3)
+    const firstThursday = target.valueOf()
+    target.setMonth(0, 1)
+    if (target.getDay() !== 4) {
+      target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7)
+    }
+    return 1 + Math.ceil((firstThursday - target) / 604800000)
+  }
+
   // Formatear fecha para mostrar
   const formatDate = (date) => {
     return date.toLocaleDateString('es-CL', { 
@@ -1323,9 +1336,10 @@ Esta acción creará turnos reales en la base de datos.`
   // Memoizar variables derivadas para evitar re-cálculos
   const monday = useMemo(() => getMonday(currentWeek), [currentWeek])
   const weekDays = useMemo(() => getWeekDays(monday), [monday])
+  const weekNumber = useMemo(() => getWeekNumber(monday), [monday])
   const weekRange = useMemo(() => 
-    `${monday.getDate()} ${monday.toLocaleDateString('es-CL', { month: 'short' })} - ${weekDays[6].getDate()} ${weekDays[6].toLocaleDateString('es-CL', { month: 'short', year: 'numeric' })}`,
-    [monday, weekDays]
+    `Semana ${weekNumber} (${monday.getDate()} ${monday.toLocaleDateString('es-CL', { month: 'short' })} - ${weekDays[6].getDate()} ${weekDays[6].toLocaleDateString('es-CL', { month: 'short', year: 'numeric' })})`,
+    [monday, weekDays, weekNumber]
   )
 
   // Calcular estadísticas filtradas - MEMOIZADO
@@ -1532,7 +1546,7 @@ Esta acción creará turnos reales en la base de datos.`
           <div className="flex items-center justify-center">
             <CardTitle className="flex items-center gap-2">
               <CalendarIcon className="h-5 w-5" />
-              {`Semana: ${weekRange}`}
+              {weekRange}
             </CardTitle>
           </div>
         </CardHeader>
