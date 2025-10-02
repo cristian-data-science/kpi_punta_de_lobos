@@ -151,7 +151,9 @@ const AddShiftModal = ({
       })
     })
 
-    // Validar cada trabajador
+    // 🆕 Validar cada trabajador - AGRUPAR VIOLACIONES POR TRABAJADOR
+    const workerViolations = {} // { trabajadorId: [messages] }
+    
     Object.entries(shiftAssignments).forEach(([turnoTipo, trabajadores]) => {
       trabajadores.forEach(trabajadorId => {
         const worker = workers.find(w => w.id === trabajadorId)
@@ -165,12 +167,31 @@ const AddShiftModal = ({
         )
 
         if (!validation.valid) {
-          allAlerts.push({
-            id: `${trabajadorId}-${turnoTipo}-overlap`,
-            type: 'warning',
-            message: `${formatWorkerName(worker.nombre)}: ${validation.message}`
-          })
+          // Agrupar mensajes por trabajador
+          if (!workerViolations[trabajadorId]) {
+            workerViolations[trabajadorId] = {
+              worker: worker,
+              messages: []
+            }
+          }
+          // Solo agregar si este mensaje específico no existe ya
+          if (!workerViolations[trabajadorId].messages.includes(validation.message)) {
+            workerViolations[trabajadorId].messages.push(validation.message)
+          }
         }
+      })
+    })
+    
+    // Crear UNA alerta por trabajador con todos sus mensajes
+    Object.entries(workerViolations).forEach(([trabajadorId, data]) => {
+      const messagesText = data.messages.length === 1 
+        ? data.messages[0]
+        : data.messages.join(' | ')
+      
+      allAlerts.push({
+        id: `${trabajadorId}-violations`,
+        type: 'warning',
+        message: `${formatWorkerName(data.worker.nombre)}: ${messagesText}`
       })
     })
 
@@ -421,7 +442,7 @@ const AddShiftModal = ({
               }
               warnings.push({
                 type: 'combination-not-recommended',
-                message: `Combinación de turnos no recomendada (${shiftNames[otherType]} + ${shiftNames[currentShiftNum]})`
+                message: `Combinación de turnos no recomendada (${shiftNames[otherType]} + ${shiftNames[turnoType]})`
               })
             }
           }
@@ -500,15 +521,13 @@ const AddShiftModal = ({
         
         // Detectar combinación no recomendada
         if (turnosConfig.enforceRules) {
-          const isAssignedInOtherShift = Object.entries(shiftAssignments).some(([type, assignments]) => 
-            type !== turnoType && assignments.includes(workerId)
-          )
+          // Obtener TODOS los otros turnos del trabajador
+          const otherTypes = Object.entries(shiftAssignments)
+            .filter(([type, assignments]) => type !== turnoType && assignments.includes(workerId))
+            .map(([type]) => type)
           
-          if (isAssignedInOtherShift) {
-            const otherType = Object.entries(shiftAssignments).find(([type, assignments]) => 
-              type !== turnoType && assignments.includes(workerId)
-            )[0]
-            
+          // Verificar cada combinación
+          otherTypes.forEach(otherType => {
             const shiftNumbers = {
               'primer_turno': 1,
               'segundo_turno': 2,
@@ -525,12 +544,16 @@ const AddShiftModal = ({
                 'segundo_turno': '2º',
                 'tercer_turno': '3º'
               }
-              warnings.push({
-                type: 'combination-not-recommended',
-                message: `Combinación de turnos no recomendada (${shiftNames[otherType]} + ${shiftNames[turnoType]})`
-              })
+              // Solo agregar si no existe ya este warning
+              const warningMessage = `Combinación de turnos no recomendada (${shiftNames[otherType]} + ${shiftNames[turnoType]})`
+              if (!warnings.find(w => w.message === warningMessage)) {
+                warnings.push({
+                  type: 'combination-not-recommended',
+                  message: warningMessage
+                })
+              }
             }
-          }
+          })
           
           // Detectar turno continuo - CRÍTICO: usar fecha actual
           if (turnosConfig.nextDayRules.enforceNextDayRule) {
