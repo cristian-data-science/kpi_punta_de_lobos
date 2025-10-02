@@ -1,5 +1,57 @@
 # TransApp - AI Coding Agent Instructions
 
+## 🔒 CRITICAL SECURITY RULES (READ FIRST)
+
+### **NEVER COMMIT SECRETS TO GIT - ABSOLUTE PROHIBITION**
+
+#### ❌ **PROHIBITED PATTERNS** (Will cause security incidents):
+```javascript
+// ❌ NEVER hardcode credentials with fallback operator
+const key = process.env.SECRET || 'hardcoded-value'
+const token = process.env.TOKEN || 'eyJhbGci...'
+
+// ❌ NEVER hardcode service_role keys
+const serviceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+
+// ❌ NEVER hardcode passwords
+const password = 'admin123'
+
+// ❌ NEVER hardcode API keys
+const apiKey = 'sk_live_...'
+```
+
+#### ✅ **REQUIRED PATTERN** (Always use this):
+```javascript
+// ✅ ALWAYS require dotenv at the top
+require('dotenv').config({ path: '.env.local' })
+
+// ✅ ALWAYS validate environment variables exist
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+if (!key) {
+  console.error('❌ ERROR: SUPABASE_SERVICE_ROLE_KEY required in .env.local')
+  process.exit(1)
+}
+
+// ✅ Frontend uses import.meta.env
+const url = import.meta.env.VITE_SUPABASE_URL
+```
+
+#### 🛡️ **Security Checklist Before ANY Commit**:
+- [ ] No JWT tokens (strings starting with `eyJ`)
+- [ ] No `process.env.X || 'hardcoded'` patterns
+- [ ] All credentials come from `.env.local`
+- [ ] No service_role keys in code
+- [ ] Test scripts use `require('dotenv').config()`
+- [ ] Strict validation with `process.exit(1)` if variables missing
+
+#### 📁 **Approved Credential Storage**:
+- ✅ **`.env.local`** - Local development (protected by .gitignore)
+- ✅ **Vercel Environment Variables** - Production/Preview
+- ✅ **`import.meta.env`** - Vite frontend variables (VITE_ prefix)
+- ❌ **NEVER in source code files** (.js, .jsx, .cjs, .ts, .tsx)
+
+---
+
 ## Project Overview
 TransApp is a React-based transportation management system for fleet and worker administration. Built with modern React 19, Vite, and a comprehensive Radix UI + Tailwind design system with **integrated Supabase PostgreSQL backend and Model Context Protocol (MCP) support**.
 
@@ -8,6 +60,7 @@ TransApp is a React-based transportation management system for fleet and worker 
 **🏗️ Deployment**: Automated via Vercel CLI with manual triggers when needed
 **🗄️ Database**: Supabase PostgreSQL with 14+ workers and 98+ shift records
 **🔌 MCP Integration**: Complete Model Context Protocol implementation for AI-database interactions
+**🔐 Security**: Strict environment variable validation, no hardcoded credentials
 
 ## Architecture & Data Flow
 
@@ -259,12 +312,9 @@ trabajadores table:
 - id (uuid, PK)
 - nombre (text)
 - rut (text, unique)  
-- contrato (text: 'fijo'|'planta'|'eventual')
+- contrato (text: 'fijo'|'eventual'|'planta') - ALL SET TO 'fijo'
 - telefono (text)
-- estado (text: 'activo'|'inactivo'|'licencia'|'vacaciones')
-- sueldo_base (integer, default 0) - Base monthly salary
-- dias_trabajados (integer, default 30) - Days worked in month
-- sueldo_proporcional (integer, default 0) - Calculated proportional salary
+- estado (text: 'activo'|'inactivo')
 - created_at, updated_at (timestamps)
 
 turnos table:
@@ -277,12 +327,11 @@ turnos table:
 ```
 
 ### Current Database State
-- **14 Workers**: Mixed contracts (fijo, planta, eventual) with payroll fields
+- **14 Workers**: All with "fijo" contracts (updated from "eventual")
 - **98+ Shifts**: Real shift data with proper worker relationships
 - **UUID PKs**: All tables use UUID primary keys
 - **RLS Enabled**: Row Level Security policies configured
-- **Indexed**: Optimized queries on rut, fecha, estado, contrato, and relationship fields
-- **Triggers**: Automatic salary calculation via calcular_sueldo_proporcional()
+- **Indexed**: Optimized queries on rut, fecha, and relationship fields
 
 ### MCP Configuration
 ```json
@@ -1040,3 +1089,215 @@ loginAttemptsEnabled: true,   // Full security system active
 maxLoginAttempts: 5,          // Allow 5 attempts instead of 3
 lockoutDuration: 30,          // 30-minute lockout instead of 15
 ```
+
+---
+
+## 🔐 SECURITY DEVELOPMENT PATTERNS (MANDATORY)
+
+### Environment Variables Pattern (ALWAYS USE)
+
+#### ✅ **Node.js/CommonJS Scripts** (test files, MCP servers)
+```javascript
+// ALWAYS start with dotenv configuration
+require('dotenv').config({ path: '.env.local' })
+
+// Get environment variables
+const supabaseUrl = process.env.VITE_SUPABASE_URL
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+// STRICT validation - NEVER skip this
+if (!supabaseUrl || !serviceKey) {
+  console.error('❌ ERROR: Required environment variables missing')
+  console.error('Configure in .env.local:')
+  console.error('  - VITE_SUPABASE_URL')
+  console.error('  - SUPABASE_SERVICE_ROLE_KEY')
+  process.exit(1)  // Force exit, don't continue
+}
+
+// Now safe to use
+const supabase = createClient(supabaseUrl, serviceKey)
+```
+
+#### ✅ **Frontend/Vite** (React components, services)
+```javascript
+// Use import.meta.env for Vite
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+// Validation in critical paths
+if (!supabaseUrl || !anonKey) {
+  throw new Error('Missing Supabase configuration')
+}
+```
+
+---
+
+### ❌ **NEVER DO THIS** - Prohibited Patterns
+
+#### 🚫 **Fallback with Hardcoded Values**
+```javascript
+// ❌ NEVER - Security incident waiting to happen
+const key = process.env.SECRET || 'hardcoded-secret-value'
+const token = process.env.TOKEN || 'eyJhbGci...'
+```
+
+#### 🚫 **Direct Hardcoding**
+```javascript
+// ❌ NEVER - Immediate security breach
+const serviceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+const password = 'mypassword123'
+```
+
+#### 🚫 **Placeholder Fallbacks**
+```javascript
+// ❌ AVOID - Still promotes bad patterns
+const key = process.env.KEY || 'your-key-here'
+const key = process.env.KEY || 'tu_clave_aqui'
+```
+
+---
+
+### Pre-Commit Security Checklist
+
+Before ANY `git add` or `git commit`:
+
+```bash
+# 1. Search for JWT tokens
+grep -r "eyJ" --include="*.js" --include="*.jsx" --include="*.cjs" --exclude-dir=node_modules
+
+# 2. Search for service_role mentions
+grep -r "service_role.*eyJ" --include="*.js" --include="*.cjs"
+
+# 3. Search for fallback operators with values
+grep -r "process\.env\.\w\+\s*||.*['\"]" --include="*.js" --include="*.cjs"
+
+# 4. Check for passwords
+grep -ri "password.*=.*['\"][^'\"]\+['\"]" --include="*.js" --include="*.jsx"
+```
+
+**If ANY of these return results outside `.env.local`, STOP and fix before committing.**
+
+---
+
+### Files That Should NEVER Be Committed
+
+**Already Protected by .gitignore** ✅:
+```
+.env
+.env.local
+.env.development.local
+.env.test.local  
+.env.production.local
+mcp.json
+```
+
+**Always Verify**: Before committing, run:
+```bash
+git status
+git diff --cached
+```
+
+Look for:
+- ❌ Any file containing `eyJ` (JWT tokens)
+- ❌ Service role keys
+- ❌ Passwords or API keys
+- ❌ Database credentials
+
+---
+
+### Secure Development Workflow
+
+#### 1. **Creating New Scripts**
+```javascript
+// Template for new Node.js scripts:
+#!/usr/bin/env node
+require('dotenv').config({ path: '.env.local' })
+
+// Get and validate ALL required env vars
+const REQUIRED_VARS = ['VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']
+const missing = REQUIRED_VARS.filter(v => !process.env[v])
+
+if (missing.length > 0) {
+  console.error('❌ Missing required variables:', missing.join(', '))
+  console.error('Add them to .env.local')
+  process.exit(1)
+}
+
+// Rest of your script...
+```
+
+#### 2. **Code Review Process**
+When reviewing PRs or your own code:
+- ✅ All credentials from `.env.local`
+- ✅ No `||` fallbacks with hardcoded values
+- ✅ Strict validation with `process.exit(1)`
+- ✅ Error messages guide to `.env.local`
+- ✅ No JWT tokens in code
+
+#### 3. **Testing Locally**
+```bash
+# Before testing new scripts:
+# 1. Verify .env.local exists
+ls -la .env.local
+
+# 2. Verify it has required variables
+cat .env.local | grep SUPABASE
+
+# 3. Test the script
+node test/your-new-script.cjs
+```
+
+---
+
+### Environment Variable Reference
+
+#### **`.env.local`** (Local Development)
+```bash
+# Frontend variables (VITE_ prefix required)
+VITE_SUPABASE_URL=https://csqxopqlgujduhmwxixo.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ... (public key, safe)
+VITE_ADMIN_USERNAME=admin
+VITE_ADMIN_PASSWORD=transapp123
+
+# Backend/Script variables (NO VITE_ prefix)
+SUPABASE_SERVICE_ROLE_KEY=eyJ... (SECRET - admin access)
+```
+
+#### **Vercel** (Production/Preview)
+Set in Dashboard: https://vercel.com/cris-projects-245b6b28/transapp/settings/environment-variables
+- All variables from `.env.local`
+- Scope: Production, Preview, Development (as needed)
+
+---
+
+### Emergency Response Plan
+
+**If you accidentally commit secrets**:
+
+1. **STOP immediately** - Don't push if not pushed yet
+2. **Remove from staging**: `git reset HEAD <file>`
+3. **If already pushed**: Follow incident response in `SECURITY_AUDIT_2025-10-01.md`
+4. **Rotate compromised keys** immediately in respective services
+5. **Update `.env.local`** with new keys
+6. **Update Vercel** environment variables
+7. **Document incident** in `docs/SECURITY_IMPROVEMENTS.md`
+
+---
+
+### Security Resources
+
+- 📄 **Full Audit**: `SECURITY_AUDIT_2025-10-01.md` (root directory)
+- 📄 **Incident History**: `docs/SECURITY_IMPROVEMENTS.md`
+- 📄 **Login Security**: `docs/LOGIN_SECURITY.md`
+- 🔗 **Supabase Dashboard**: https://supabase.com/dashboard/project/csqxopqlgujduhmwxixo
+- 🔗 **Vercel Env Vars**: https://vercel.com/cris-projects-245b6b28/transapp/settings/environment-variables
+
+---
+
+### Remember
+
+> **"If you're not sure whether to hardcode it, DON'T."**
+> 
+> **"Environment variables exist for a reason - USE THEM."**
+>
+> **"5 minutes to use dotenv, 5 hours to fix a security breach."**
