@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Personas from './pages/Personas'
+import Turnos from './pages/Turnos'
 import Registros from './pages/Registros'
 import Reportes from './pages/Reportes'
 import Configuracion from './pages/Configuracion'
@@ -47,6 +48,7 @@ const AppRoutes = () => {
       <Route path="/" element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="personas" element={<Personas />} />
+        <Route path="turnos" element={<Turnos />} />
         <Route path="registros" element={<Registros />} />
         <Route path="reportes" element={<Reportes />} />
         <Route path="configuracion" element={<Configuracion />} />
