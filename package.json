@@ -1,9 +1,9 @@
 {
-  "name": "puntadelobos-app",
+  "name": "kpi-punta-de-lobos",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Sistema de gestión de personas para Punta de Lobos",
+  "description": "Sistema KPI de gestión de personas para Punta de Lobos",
   "packageManager": "pnpm@9.15.2",
   "engines": {
     "node": ">=18.0.0",

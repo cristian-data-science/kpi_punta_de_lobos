@@ -1,4 +1,4 @@
-# TransApp - AI Coding Agent Instructions
+# KPI Punta de Lobos - AI Coding Agent Instructions
 
 ## 🔒 CRITICAL SECURITY RULES (READ FIRST)
 
