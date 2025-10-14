@@ -1,9 +1,9 @@
 {
-  "name": "transapp",
+  "name": "puntadelobos-app",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Sistema de gestión de trabajadores y flota para empresas de transporte",
+  "description": "Sistema de gestión de personas para Punta de Lobos",
   "packageManager": "pnpm@9.15.2",
   "engines": {
     "node": ">=18.0.0",

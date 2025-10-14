@@ -3,16 +3,11 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import UploadFiles from './pages/UploadFiles'
-import Workers from './pages/Workers'
-import Turnos from './pages/Turnos'
-import Tarifas from './pages/Tarifas'
-import Cobros from './pages/Cobros'
-import Payments from './pages/Payments'
-import Inconsistencies from './pages/Inconsistencies'
-import Calendar from './pages/Calendar'
-import GuiaUso from './pages/GuiaUso'
-import { Truck } from 'lucide-react'
+import Personas from './pages/Personas'
+import Registros from './pages/Registros'
+import Reportes from './pages/Reportes'
+import Configuracion from './pages/Configuracion'
+import { Waves } from 'lucide-react'
 import './App.css'
 
 // Componente interno que maneja la lógica de rutas
@@ -24,16 +19,16 @@ const AppRoutes = () => {
   if (loading) {
     console.log('AppRoutes: Mostrando pantalla de carga')
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-cyan-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-orange-600 rounded-2xl shadow-2xl mb-4 animate-pulse">
-            <Truck className="h-8 w-8 text-white" />
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-2xl shadow-2xl mb-4 animate-pulse">
+            <Waves className="h-8 w-8 text-white" />
           </div>
-          <h2 className="text-xl font-semibold text-gray-700 mb-2">TransApp</h2>
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">Punta de Lobos</h2>
           <div className="flex items-center justify-center gap-2">
-            <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
-            <div className="w-2 h-2 bg-orange-600 rounded-full animate-bounce delay-75"></div>
-            <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce delay-150"></div>
+            <div className="w-2 h-2 bg-teal-600 rounded-full animate-bounce"></div>
+            <div className="w-2 h-2 bg-cyan-600 rounded-full animate-bounce delay-75"></div>
+            <div className="w-2 h-2 bg-teal-600 rounded-full animate-bounce delay-150"></div>
           </div>
           <p className="text-sm text-gray-500 mt-2">Cargando...</p>
         </div>
@@ -51,15 +46,10 @@ const AppRoutes = () => {
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<Dashboard />} />
-        <Route path="upload" element={<UploadFiles />} />
-        <Route path="workers" element={<Workers />} />
-        <Route path="turnos" element={<Turnos />} />
-        <Route path="tarifas" element={<Tarifas />} />
-        <Route path="cobros" element={<Cobros />} />
-        <Route path="payments" element={<Payments />} />
-        <Route path="inconsistencies" element={<Inconsistencies />} />
-        <Route path="calendar" element={<Calendar />} />
-        <Route path="guia-uso" element={<GuiaUso />} />
+        <Route path="personas" element={<Personas />} />
+        <Route path="registros" element={<Registros />} />
+        <Route path="reportes" element={<Reportes />} />
+        <Route path="configuracion" element={<Configuracion />} />
       </Route>
     </Routes>
   )

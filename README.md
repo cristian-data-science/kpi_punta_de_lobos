@@ -1,251 +1,499 @@
-# TransApp - Sistema de Gestión de Transporte
+# 🌊 Punta de Lobos - Sistema de Gestión de Personas# TransApp - Sistema de Gestión de Transporte
 
-<div align="center">
 
-![TransApp](https://img.shields.io/badge/TransApp-Sistema%20de%20Gestión-blue)
+
+Sistema moderno y completo de gestión de personas para Punta de Lobos, construido con React, Vite y Supabase.<div align="center">
+
+
+
+## ✨ Características![TransApp](https://img.shields.io/badge/TransApp-Sistema%20de%20Gestión-blue)
+
 ![React](https://img.shields.io/badge/React-19.1.0-61dafb)
-![Vite](https://img.shields.io/badge/Vite-6.3.5-646cff)
-![TailwindCSS](https://img.shields.io/badge/Tailwind-4.1.7-38bdf8)
 
-Sistema de gestión integral para empresas de transporte y logística. Permite administrar trabajadores, vehículos, rutas y pagos de manera eficiente con exportación a Excel.
+- 🔐 Sistema de autenticación seguro con control de intentos![Vite](https://img.shields.io/badge/Vite-6.3.5-646cff)
 
-[Demo en Vivo](https://transapp-demo.vercel.app) • [Documentación](./DEVELOPMENT.md) • [Reportar Bug](../../issues)
+- 📊 Dashboard con métricas y estadísticas en tiempo real![TailwindCSS](https://img.shields.io/badge/Tailwind-4.1.7-38bdf8)
 
-</div>
+- 👥 Gestión completa de personas (visitantes, guías, staff, instructores)
+
+- 📝 Registro cronológico de actividades y eventosSistema de gestión integral para empresas de transporte y logística. Permite administrar trabajadores, vehículos, rutas y pagos de manera eficiente con exportación a Excel.
+
+- 📈 Reportes y análisis de datos
+
+- ⚙️ Panel de configuración del sistema[Demo en Vivo](https://transapp-demo.vercel.app) • [Documentación](./DEVELOPMENT.md) • [Reportar Bug](../../issues)
+
+- 📱 Diseño responsive (móvil, tablet, desktop)
+
+- 🎨 UI moderna con TailwindCSS y shadcn/ui</div>
+
+- 🗄️ Base de datos PostgreSQL en Supabase
 
 ## 🚛 Características Principales
 
+## 🛠️ Stack Tecnológico
+
 ### 📊 Dashboard Inteligente
-- Panel de control con métricas en tiempo real
-- Gráficos interactivos de rendimiento
-- Indicadores KPI principales
 
-### 👥 Gestión de Personal
-- Registro completo de trabajadores
+- **Frontend**: React 19 + Vite 6- Panel de control con métricas en tiempo real
+
+- **Router**: React Router 7- Gráficos interactivos de rendimiento
+
+- **UI**: TailwindCSS 4 + shadcn/ui (Radix UI)- Indicadores KPI principales
+
+- **Backend**: Supabase (PostgreSQL)
+
+- **Iconos**: Lucide React### 👥 Gestión de Personal
+
+- **Gestor**: pnpm- Registro completo de trabajadores
+
 - Control de turnos y horarios
-- Cálculo automático de pagos
 
-### 🚗 Control de Flota
-- Administración de vehículos
-- Seguimiento de mantenimientos
+## 📋 Requisitos Previos- Cálculo automático de pagos
+
+
+
+- Node.js >= 18.0.0### 🚗 Control de Flota
+
+- pnpm >= 9.0.0- Administración de vehículos
+
+- Cuenta en Supabase (gratuita)- Seguimiento de mantenimientos
+
 - Historial de servicios
 
-### 🗺️ Gestión de Rutas
-- Planificación inteligente de rutas
-- Asignación de vehículos y conductores
-- Optimización de recorridos
+## 🚀 Instalación
 
-### 💰 Sistema de Pagos
-- Cálculo automático de remuneraciones
+### 🗺️ Gestión de Rutas
+
+### 1. Clonar el repositorio- Planificación inteligente de rutas
+
+- Asignación de vehículos y conductores
+
+```bash- Optimización de recorridos
+
+git clone https://github.com/cristian-data-science/transapp.git
+
+cd transapp### 💰 Sistema de Pagos
+
+```- Cálculo automático de remuneraciones
+
 - Tarifas diferenciadas (días normales, feriados, domingos)
-- **Exportación a Excel con estilos profesionales**
+
+### 2. Instalar dependencias- **Exportación a Excel con estilos profesionales**
+
 - Reportes detallados por trabajador
 
-### 📁 Importación de Datos
-- Carga masiva via CSV/Excel
+```bash
+
+pnpm install### 📁 Importación de Datos
+
+```- Carga masiva via CSV/Excel
+
 - Validación automática de datos
-- Procesamiento de planillas de turnos
 
-## 🛠️ Tecnologías Utilizadas
+### 3. Configurar variables de entorno- Procesamiento de planillas de turnos
 
-### Frontend
+
+
+```bash## 🛠️ Tecnologías Utilizadas
+
+# Copiar archivo de ejemplo
+
+cp .env.example .env.local### Frontend
+
 - **React 19.1.0** - Framework principal
-- **Vite 6.3.5** - Build tool y dev server
-- **React Router DOM 7.6.1** - Navegación
 
-### Styling & UI
+# Editar .env.local con tus credenciales de Supabase- **Vite 6.3.5** - Build tool y dev server
+
+```- **React Router DOM 7.6.1** - Navegación
+
+
+
+Contenido de `.env.local`:### Styling & UI
+
 - **Tailwind CSS 4.1.7** - Framework de estilos
-- **Radix UI** - Componentes accesibles
-- **shadcn/ui** - Sistema de componentes
-- **Lucide React** - Iconografía
-- **Framer Motion 12.15.0** - Animaciones
 
-### Visualización de Datos
+```env- **Radix UI** - Componentes accesibles
+
+VITE_SUPABASE_URL=https://tu-proyecto.supabase.co- **shadcn/ui** - Sistema de componentes
+
+VITE_SUPABASE_ANON_KEY=tu_anon_key_de_supabase- **Lucide React** - Iconografía
+
+VITE_ADMIN_USERNAME=admin- **Framer Motion 12.15.0** - Animaciones
+
+VITE_ADMIN_PASSWORD=tu_password_seguro
+
+```### Visualización de Datos
+
 - **ECharts 5.6.0** - Gráficos avanzados
-- **Recharts 2.15.3** - Gráficos React
+
+### 4. Configurar Base de Datos en Supabase- **Recharts 2.15.3** - Gráficos React
+
 - **ExcelJS** - Exportación a Excel con estilos
 
-### Desarrollo
-- **ESLint 9.25.0** - Linting
-- **Terser 5.43.1** - Minificación
+1. Crear proyecto en [Supabase](https://supabase.com)
+
+2. Ir a **SQL Editor** en el dashboard### Desarrollo
+
+3. Ejecutar el script completo de `sql/puntadelobos_setup.sql`- **ESLint 9.25.0** - Linting
+
+4. Verificar que las tablas se crearon correctamente- **Terser 5.43.1** - Minificación
+
 - **pnpm 9.15.2** - Package manager
+
+### 5. Ejecutar en desarrollo
 
 ## 📦 Instalación y Desarrollo
 
-### Prerrequisitos
+```bash
+
+pnpm dev### Prerrequisitos
+
+```
 
 ```bash
-Node.js >= 18.0.0
+
+La aplicación estará disponible en `http://localhost:5173`Node.js >= 18.0.0
+
 pnpm >= 9.0.0
-```
 
-### Instalación Local
+## 📁 Estructura del Proyecto```
 
-```bash
-# Clonar el repositorio
-git clone https://github.com/tu-usuario/transapp.git
-cd transapp
 
-# Instalar dependencias
-pnpm install
 
-# Iniciar servidor de desarrollo
-pnpm dev
+```### Instalación Local
 
-# Abrir en http://localhost:5173
-```
+transapp/
 
-### Scripts Disponibles
+├── src/```bash
 
-```bash
-pnpm dev          # Servidor de desarrollo
-pnpm build        # Build de producción
-pnpm preview      # Preview del build
-pnpm lint         # Verificar código
-pnpm build:vercel # Build para Vercel
-```
+│   ├── components/          # Componentes reutilizables# Clonar el repositorio
 
-## 🚀 Despliegue en Vercel
+│   │   ├── ui/             # Componentes UI (shadcn/ui)git clone https://github.com/tu-usuario/transapp.git
 
-### Configuración Automática
+│   │   ├── Header.jsx      # Cabecera principalcd transapp
 
-1. **Fork/Clone** este repositorio
-2. **Conecta con Vercel**: Ve a [vercel.com](https://vercel.com) y conecta tu repositorio
+│   │   ├── Sidebar.jsx     # Menú lateral
+
+│   │   └── Layout.jsx      # Layout principal# Instalar dependencias
+
+│   ├── contexts/pnpm install
+
+│   │   └── AuthContext.jsx # Contexto de autenticación
+
+│   ├── pages/              # Páginas de la aplicación# Iniciar servidor de desarrollo
+
+│   │   ├── Login.jsx       # Página de loginpnpm dev
+
+│   │   ├── Dashboard.jsx   # Panel principal
+
+│   │   ├── Personas.jsx    # Gestión de personas# Abrir en http://localhost:5173
+
+│   │   ├── Registros.jsx   # Historial de actividades```
+
+│   │   ├── Reportes.jsx    # Análisis y estadísticas
+
+│   │   └── Configuracion.jsx # Ajustes del sistema### Scripts Disponibles
+
+│   ├── services/           # Servicios de datos
+
+│   │   ├── supabaseClient.js    # Cliente Supabase```bash
+
+│   │   └── persistentStorage.js # LocalStorage wrapperpnpm dev          # Servidor de desarrollo
+
+│   ├── lib/pnpm build        # Build de producción
+
+│   │   └── utils.js        # Utilidades generalespnpm preview      # Preview del build
+
+│   ├── App.jsx             # Componente principalpnpm lint         # Verificar código
+
+│   └── main.jsx            # Punto de entradapnpm build:vercel # Build para Vercel
+
+├── sql/```
+
+│   └── puntadelobos_setup.sql  # Script SQL para Supabase
+
+├── docs/## 🚀 Despliegue en Vercel
+
+│   └── README.md           # Documentación del template
+
+├── package.json### Configuración Automática
+
+├── vite.config.js
+
+└── .env.example1. **Fork/Clone** este repositorio
+
+```2. **Conecta con Vercel**: Ve a [vercel.com](https://vercel.com) y conecta tu repositorio
+
 3. **Deploy automático**: Vercel detectará automáticamente la configuración
+
+## 🔐 Credenciales por Defecto
 
 ### Configuración Manual
 
-```bash
-# Instalar Vercel CLI
-npm i -g vercel
+**Usuario**: admin  
 
-# Deploy desde terminal
+**Contraseña**: (definida en `.env.local`)```bash
+
+# Instalar Vercel CLI
+
+⚠️ **Importante**: Cambia estas credenciales en producción.npm i -g vercel
+
+
+
+## 📊 Base de Datos# Deploy desde terminal
+
 vercel
 
+### Tablas Principales
+
 # Deploy de producción
-vercel --prod
-```
 
-### Variables de Entorno
+#### `personas`vercel --prod
 
-El proyecto utiliza localStorage para persistencia de datos. No requiere variables de entorno adicionales.
+Gestión de personas registradas:```
 
-## 🏗️ Estructura del Proyecto
+- nombre, rut, email, telefono
 
-```
-transapp/
-├── public/                 # Archivos estáticos
-├── src/
+- tipo: visitante, guia, staff, instructor, otro### Variables de Entorno
+
+- estado: activo, inactivo
+
+- notas, timestampsEl proyecto utiliza localStorage para persistencia de datos. No requiere variables de entorno adicionales.
+
+
+
+#### `registros`## 🏗️ Estructura del Proyecto
+
+Historial de actividades:
+
+- persona_id (foreign key)```
+
+- fecha, tipo_actividadtransapp/
+
+- descripcion, duracion_minutos├── public/                 # Archivos estáticos
+
+- notas, timestamps├── src/
+
 │   ├── components/        # Componentes reutilizables
-│   │   └── ui/           # Componentes base (shadcn/ui)
-│   ├── contexts/         # Contextos de React
-│   ├── hooks/            # Custom hooks
-│   ├── lib/              # Utilidades y configuración
-│   ├── pages/            # Páginas de la aplicación
-│   ├── services/         # Servicios de datos
-│   └── utils/            # Funciones de utilidad
-├── .gitignore
-├── package.json
-├── README.md
-├── tailwind.config.js
-└── vite.config.js
-```
 
-## 💡 Características Técnicas
+#### `configuracion`│   │   └── ui/           # Componentes base (shadcn/ui)
+
+Ajustes del sistema:│   ├── contexts/         # Contextos de React
+
+- clave (única), valor, tipo│   ├── hooks/            # Custom hooks
+
+- descripcion, timestamps│   ├── lib/              # Utilidades y configuración
+
+│   ├── pages/            # Páginas de la aplicación
+
+## 🎯 Funcionalidades Principales│   ├── services/         # Servicios de datos
+
+│   └── utils/            # Funciones de utilidad
+
+### Dashboard├── .gitignore
+
+- Métricas generales del sistema├── package.json
+
+- Resumen de actividades├── README.md
+
+- Estadísticas en tiempo real├── tailwind.config.js
+
+└── vite.config.js
+
+### Personas```
+
+- Agregar, editar, eliminar personas
+
+- Búsqueda y filtros avanzados## 💡 Características Técnicas
+
+- Categorización por tipo (visitante, guía, staff, etc.)
 
 ### Sistema de Datos
-- **Persistencia**: localStorage con prefijo `transapp_`
-- **Gestión centralizada**: MasterDataService singleton
-- **Validación**: Esquemas de validación para CSV
+
+### Registros- **Persistencia**: localStorage con prefijo `transapp_`
+
+- Crear registros de actividades- **Gestión centralizada**: MasterDataService singleton
+
+- Historial cronológico- **Validación**: Esquemas de validación para CSV
+
+- Asociación con personas
 
 ### Rendimiento
-- **Code splitting**: Chunks optimizados
-- **Lazy loading**: Carga bajo demanda
-- **Minificación**: Terser para producción
+
+### Reportes- **Code splitting**: Chunks optimizados
+
+- Visualizaciones y gráficos- **Lazy loading**: Carga bajo demanda
+
+- Análisis de tendencias- **Minificación**: Terser para producción
+
+- Exportación de datos
 
 ### Accesibilidad
-- **Radix UI**: Componentes accesibles por defecto
-- **Navegación**: Soporte completo de teclado
-- **Semántica**: HTML semántico correcto
+
+### Configuración- **Radix UI**: Componentes accesibles por defecto
+
+- Ajustes del sistema- **Navegación**: Soporte completo de teclado
+
+- Gestión de usuarios- **Semántica**: HTML semántico correcto
+
+- Personalización
 
 ## 📈 Características del Sistema de Pagos
 
+## 🔧 Scripts Disponibles
+
 ### Cálculo Automático
-- **Turnos normales**: $20.000 (1ro y 2do turno)
-- **Tercer turno**: $22.500 (días de semana)
-- **Sábados**: $27.500 (tercer turno)
-- **Domingos**: $35.000 (todos los turnos)
-- **Feriados**: Tarifa especial según configuración
 
-### Exportación Excel
-- **Estilos profesionales**: Colores y formatos elegantes
-- **Resumen por trabajador**: Total turnos y montos
-- **Detalle completo**: Cada turno con fecha y tarifa
-- **Resumen general**: Estadísticas globales
+```bash- **Turnos normales**: $20.000 (1ro y 2do turno)
 
-## 🤝 Contribución
+pnpm dev          # Servidor de desarrollo- **Tercer turno**: $22.500 (días de semana)
 
-1. Fork el proyecto
-2. Crea una rama feature (`git checkout -b feature/nueva-caracteristica`)
-3. Commit tus cambios (`git commit -m 'Agregar nueva característica'`)
-4. Push a la rama (`git push origin feature/nueva-caracteristica`)
-5. Abre un Pull Request
+pnpm build        # Build para producción- **Sábados**: $27.500 (tercer turno)
 
-## 📄 Licencia
+pnpm preview      # Preview del build- **Domingos**: $35.000 (todos los turnos)
 
-Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
-
-## 🆘 Soporte
-
-- 📧 **Email**: soporte@transapp.com
-- 🐛 **Issues**: [GitHub Issues](../../issues)
-- 📚 **Documentación**: [Development Guide](./DEVELOPMENT.md)
-
----
-
-<div align="center">
-
-**Desarrollado con ❤️ para optimizar la gestión de transporte**
-
-</div>
-
-## 🔑 Credenciales por Defecto
-
-- **Usuario**: admin
-- **Contraseña**: transapp123
-
-## 🚀 Scripts Disponibles
-
-- `pnpm dev` - Inicia el servidor de desarrollo
-- `pnpm build` - Construye la aplicación para producción
-- `pnpm preview` - Previsualiza la construcción de producción
-- `pnpm lint` - Ejecuta el linter ESLint
-
-## 📁 Estructura del Proyecto
+pnpm lint         # Linter de código- **Feriados**: Tarifa especial según configuración
 
 ```
+
+### Exportación Excel
+
+## 🎨 Personalización- **Estilos profesionales**: Colores y formatos elegantes
+
+- **Resumen por trabajador**: Total turnos y montos
+
+### Cambiar colores del tema- **Detalle completo**: Cada turno con fecha y tarifa
+
+- **Resumen general**: Estadísticas globales
+
+Editar `tailwind.config.js` y los gradientes en:
+
+- `src/components/Header.jsx`## 🤝 Contribución
+
+- `src/components/Sidebar.jsx`
+
+- `src/App.jsx`1. Fork el proyecto
+
+2. Crea una rama feature (`git checkout -b feature/nueva-caracteristica`)
+
+### Agregar nuevas páginas3. Commit tus cambios (`git commit -m 'Agregar nueva característica'`)
+
+4. Push a la rama (`git push origin feature/nueva-caracteristica`)
+
+1. Crear componente en `src/pages/`5. Abre un Pull Request
+
+2. Agregar ruta en `src/App.jsx`
+
+3. Agregar item en `src/components/Sidebar.jsx`## 📄 Licencia
+
+
+
+## 🚀 DespliegueEste proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
+
+
+
+### Vercel (Recomendado)## 🆘 Soporte
+
+
+
+1. Conectar repositorio en Vercel- 📧 **Email**: soporte@transapp.com
+
+2. Configurar variables de entorno- 🐛 **Issues**: [GitHub Issues](../../issues)
+
+3. Deploy automático- 📚 **Documentación**: [Development Guide](./DEVELOPMENT.md)
+
+
+
+### Otros Proveedores---
+
+
+
+Compatible con:<div align="center">
+
+- Netlify
+
+- Railway**Desarrollado con ❤️ para optimizar la gestión de transporte**
+
+- Render
+
+- Cualquier hosting que soporte React + Vite</div>
+
+
+
+## 📦 Dependencias Principales## 🔑 Credenciales por Defecto
+
+
+
+```json- **Usuario**: admin
+
+{- **Contraseña**: transapp123
+
+  "@supabase/supabase-js": "^2.57.2",
+
+  "react": "^19.1.0",## 🚀 Scripts Disponibles
+
+  "react-router-dom": "^7.6.1",
+
+  "tailwindcss": "^4.1.7",- `pnpm dev` - Inicia el servidor de desarrollo
+
+  "lucide-react": "^0.510.0"- `pnpm build` - Construye la aplicación para producción
+
+}- `pnpm preview` - Previsualiza la construcción de producción
+
+```- `pnpm lint` - Ejecuta el linter ESLint
+
+
+
+## 🤝 Contribuir## 📁 Estructura del Proyecto
+
+
+
+Las contribuciones son bienvenidas:```
+
 transapp/
-├── public/                 # Archivos estáticos
-├── src/
-│   ├── components/        # Componentes reutilizables
-│   │   ├── ui/           # Componentes UI base
-│   │   ├── Header.jsx    # Cabecera de la aplicación
+
+1. Fork el proyecto├── public/                 # Archivos estáticos
+
+2. Crea una rama (`git checkout -b feature/AmazingFeature`)├── src/
+
+3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)│   ├── components/        # Componentes reutilizables
+
+4. Push a la rama (`git push origin feature/AmazingFeature`)│   │   ├── ui/           # Componentes UI base
+
+5. Abre un Pull Request│   │   ├── Header.jsx    # Cabecera de la aplicación
+
 │   │   ├── Sidebar.jsx   # Barra lateral de navegación
-│   │   └── Layout.jsx    # Layout principal
+
+## 📝 Licencia│   │   └── Layout.jsx    # Layout principal
+
 │   ├── contexts/         # Contextos de React
-│   │   └── AuthContext.jsx
+
+Proyecto de código abierto.│   │   └── AuthContext.jsx
+
 │   ├── hooks/           # Hooks personalizados
-│   ├── lib/             # Utilidades y configuraciones
+
+## 🆘 Soporte│   ├── lib/             # Utilidades y configuraciones
+
 │   ├── pages/           # Páginas de la aplicación
-│   │   ├── Dashboard.jsx
-│   │   ├── Workers.jsx
-│   │   ├── Vehicles.jsx
+
+Para soporte y preguntas:│   │   ├── Dashboard.jsx
+
+- Crear un issue en GitHub│   │   ├── Workers.jsx
+
+- Contactar al equipo de desarrollo│   │   ├── Vehicles.jsx
+
 │   │   ├── Routes.jsx
-│   │   ├── Payments.jsx
+
+---│   │   ├── Payments.jsx
+
 │   │   ├── UploadFiles.jsx
-│   │   ├── Settings.jsx
+
+**Hecho con ❤️ para Punta de Lobos** 🌊│   │   ├── Settings.jsx
+
 │   │   └── Login.jsx
-│   ├── services/        # Servicios y APIs
+
+Template base creado desde TransApp│   ├── services/        # Servicios y APIs
+
 │   │   ├── masterDataService.js
 │   │   └── persistentStorage.js
 │   ├── utils/           # Funciones utilitarias

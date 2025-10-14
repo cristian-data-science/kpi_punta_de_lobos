@@ -1,4 +1,4 @@
-import { Menu, Bell, User, Truck, LogOut } from 'lucide-react'
+import { Menu, Bell, User, Waves, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -24,12 +24,12 @@ const Header = ({ onMenuClick }) => {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex items-center space-x-2">
-            <div className="bg-gradient-to-br from-blue-600 to-orange-600 p-2 rounded-lg shadow-lg">
-              <Truck className="h-6 w-6 text-white" />
+            <div className="bg-gradient-to-br from-teal-600 to-cyan-600 p-2 rounded-lg shadow-lg">
+              <Waves className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">TransApp</h1>
-              <p className="text-sm text-gray-500">Sistema de Gestión de Transporte</p>
+              <h1 className="text-xl font-bold text-gray-900">Punta de Lobos</h1>
+              <p className="text-sm text-gray-500">Sistema de Gestión de Personas</p>
             </div>
           </div>
         </div>
