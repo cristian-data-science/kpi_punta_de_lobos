@@ -123,20 +123,20 @@ const Login = () => {
             <svg className="logo-svg" xmlns="http://www.w3.org/2000/svg" version="1.0" width="480" height="240" viewBox="0 0 240.000000 120.000000" preserveAspectRatio="xMidYMid meet">
               <defs>
                 <linearGradient id="holographicGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" style={{ stopColor: 'rgb(0, 255, 255)', stopOpacity: 1 }}>
-                    <animate attributeName="stop-color" values="rgb(0,255,255); rgb(255,0,255); rgb(0,255,255)" dur="3s" repeatCount="indefinite"/>
+                  <stop offset="0%" style={{ stopColor: '#00ffff', stopOpacity: 1 }}>
+                    <animate attributeName="stop-color" values="#00ffff;#ff00ff;#ffff00;#00ff00;#00ffff" dur="4s" repeatCount="indefinite"/>
                   </stop>
-                  <stop offset="25%" style={{ stopColor: 'rgb(128, 0, 255)', stopOpacity: 1 }}>
-                    <animate attributeName="stop-color" values="rgb(128,0,255); rgb(0,255,128); rgb(128,0,255)" dur="3s" repeatCount="indefinite"/>
+                  <stop offset="25%" style={{ stopColor: '#ff00ff', stopOpacity: 1 }}>
+                    <animate attributeName="stop-color" values="#ff00ff;#ffff00;#00ff00;#00ffff;#ff00ff" dur="4s" repeatCount="indefinite"/>
                   </stop>
-                  <stop offset="50%" style={{ stopColor: 'rgb(255, 0, 255)', stopOpacity: 1 }}>
-                    <animate attributeName="stop-color" values="rgb(255,0,255); rgb(255,255,0); rgb(255,0,255)" dur="3s" repeatCount="indefinite"/>
+                  <stop offset="50%" style={{ stopColor: '#ffff00', stopOpacity: 1 }}>
+                    <animate attributeName="stop-color" values="#ffff00;#00ff00;#00ffff;#ff00ff;#ffff00" dur="4s" repeatCount="indefinite"/>
                   </stop>
-                  <stop offset="75%" style={{ stopColor: 'rgb(0, 128, 255)', stopOpacity: 1 }}>
-                    <animate attributeName="stop-color" values="rgb(0,128,255); rgb(255,128,0); rgb(0,128,255)" dur="3s" repeatCount="indefinite"/>
+                  <stop offset="75%" style={{ stopColor: '#00ff00', stopOpacity: 1 }}>
+                    <animate attributeName="stop-color" values="#00ff00;#00ffff;#ff00ff;#ffff00;#00ff00" dur="4s" repeatCount="indefinite"/>
                   </stop>
-                  <stop offset="100%" style={{ stopColor: 'rgb(0, 255, 255)', stopOpacity: 1 }}>
-                    <animate attributeName="stop-color" values="rgb(0,255,255); rgb(255,0,255); rgb(0,255,255)" dur="3s" repeatCount="indefinite"/>
+                  <stop offset="100%" style={{ stopColor: '#00ffff', stopOpacity: 1 }}>
+                    <animate attributeName="stop-color" values="#00ffff;#ff00ff;#ffff00;#00ff00;#00ffff" dur="4s" repeatCount="indefinite"/>
                   </stop>
                 </linearGradient>
               </defs>
@@ -157,8 +157,11 @@ const Login = () => {
                 <path d="M232 164 c3 -65 7 -79 27 -95 23 -19 74 -25 106 -13 27 11 45 60 45 124 0 60 0 60 -30 60 -29 0 -29 0 -32 -67 -3 -65 -4 -68 -28 -68 -24 0 -25 3 -28 68 l-3 67 -31 0 -30 0 4 -76z"/>
                 <path d="M430 145 l0 -95 30 0 c29 0 30 2 30 43 l1 42 37 -43 c23 -26 45 -42 60 -42 21 0 22 3 22 95 l0 95 -29 0 c-28 0 -30 -3 -33 -41 l-3 -41 -30 41 c-22 30 -37 41 -57 41 l-28 0 0 -95z"/>
                 <path d="M622 218 c2 -17 11 -24 31 -26 27 -3 27 -4 27 -73 l0 -69 30 0 30 0 0 70 c0 68 1 70 25 70 20 0 25 5 25 25 0 25 -1 25 -86 25 -83 0 -85 -1 -82 -22z"/>
-                <path d="M832 164 c3 -65 7 -79 27 -95 23 -19 74 -25 106 -13 27 11 45 60 45 124 0 60 0 60 -30 60 -29 0 -29 0 -32 -67 -3 -65 -4 -68 -28 -68 -24 0 -25 3 -28 68 l-3 67 -31 0 -30 0 4 -76z"/>
-                <path d="M1032 164 c3 -65 7 -79 27 -95 23 -19 74 -25 106 -13 27 11 45 60 45 124 0 60 0 60 -30 60 -29 0 -29 0 -32 -67 -3 -65 -4 -68 -28 -68 -24 0 -25 3 -28 68 l-3 67 -31 0 -30 0 4 -76z"/>
+                <path d="M835 228 c-2 -7 -18 -50 -34 -96 l-30 -82 29 0 c20 0 31 6 35 20 9 27 51 27 60 0 4 -14 15 -20 35 -20 l29 0 -33 93 c-30 82 -37 92 -60 95 -15 2 -28 -2 -31 -10z m38 -78 c3 -12 0 -20 -8 -20 -8 0 -11 8 -8 20 3 11 7 20 8 20 1 0 5 -9 8 -20z"/>
+                <path d="M1020 145 l0 -95 59 0 c81 0 116 28 116 93 0 34 -6 52 -24 71 -21 23 -33 26 -88 26 l-63 0 0 -95z m108 33 c27 -27 7 -78 -30 -78 -15 0 -18 8 -18 45 0 37 3 45 18 45 10 0 23 -5 30 -12z"/>
+                <path d="M1220 145 l0 -95 70 0 c68 0 70 1 70 25 0 23 -4 25 -45 25 -25 0 -45 5 -45 10 0 6 16 10 35 10 31 0 35 3 35 25 0 22 -4 25 -35 25 -50 0 -44 18 8 22 35 2 43 7 45 26 3 21 0 22 -67 22 l-71 0 0 -95z"/>
+                <path d="M1440 145 l0 -95 70 0 c68 0 70 1 70 25 0 23 -4 25 -40 25 l-40 0 0 70 0 70 -30 0 -30 0 0 -95z"/>
+                <path d="M1800 145 l0 -95 63 0 c94 0 129 34 92 87 -10 14 -12 24 -5 28 14 9 13 48 -2 63 -7 7 -40 12 -80 12 l-68 0 0 -95z m100 40 c0 -8 -9 -15 -20 -15 -11 0 -20 7 -20 15 0 8 9 15 20 15 11 0 20 -7 20 -15z m10 -75 c0 -5 -11 -10 -25 -10 -14 0 -25 5 -25 10 0 6 11 10 25 10 14 0 25 -4 25 -10z"/>
               </g>
             </svg>
           </div>
