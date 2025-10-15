@@ -49,34 +49,42 @@
   grid-template-columns: 60px repeat(7, minmax(120px, 1fr));
   min-width: 900px;
   position: relative;
+  /* Importante: eliminar height para que sticky funcione */
 }
 
-/* Cabecera de días - MÁS COMPACTA */
+/* Cabecera de días - MÁS COMPACTA Y FIJA */
 .day-header {
   background: linear-gradient(to bottom, #f8f9fa 0%, #f3f4f6 100%);
   border: 1px solid #e5e7eb;
   border-top: none;
-  padding: 6px 8px; /* Reducido de 8px */
+  padding: 6px 8px;
   text-align: center;
   font-weight: 600;
   color: #374151;
   text-transform: uppercase;
+  position: -webkit-sticky; /* Safari */
   position: sticky;
   top: 0;
-  z-index: 20;
-  height: 48px; /* Reducido de 56px a 48px */
+  z-index: 20; /* Reducido de 100 a 20 para que los modales queden sobre él */
+  height: 48px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px; /* Reducido de 2px */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  gap: 1px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  background-clip: padding-box;
 }
 
 .day-header.hour-label {
   background: white;
   border-left: none;
-  box-shadow: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  position: -webkit-sticky; /* Safari */
+  position: sticky;
+  top: 0;
+  z-index: 21; /* Reducido de 101 a 21 */
+  left: 0;
 }
 
 .day-name {
@@ -92,7 +100,7 @@
   line-height: 1;
 }
 
-/* Columna de horas - MÁS COMPACTO */
+/* Columna de horas - MÁS COMPACTO Y FIJO */
 .hour-cell {
   background: #fafafa;
   border: 1px solid #e5e7eb;
@@ -105,7 +113,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 44px; /* Reducido de 52px a 44px para compactar */
+  height: 44px;
+  position: -webkit-sticky; /* Safari */
+  position: sticky;
+  left: 0;
+  z-index: 10; /* Por debajo de los headers (20-21) pero sobre las celdas normales */
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
 }
 
 /* Celdas del día - MÁS COMPACTAS */
@@ -118,27 +131,51 @@
   transition: background-color 0.2s ease;
 }
 
+/* Alternar fondo de columnas para distinguir días */
+.day-cell:nth-child(8n+2),
+.day-cell:nth-child(8n+4),
+.day-cell:nth-child(8n+6),
+.day-cell:nth-child(8n+8) {
+  background: #f9fafb; /* Gris muy claro para días alternos */
+}
+
+.day-header:nth-child(8n+2),
+.day-header:nth-child(8n+4),
+.day-header:nth-child(8n+6),
+.day-header:nth-child(8n+8) {
+  background: linear-gradient(to bottom, #f3f4f6 0%, #e5e7eb 100%);
+}
+
+
 .day-cell:hover {
   background: #f0f9ff;
   border-color: #bfdbfe;
 }
 
+/* Mantener fondo alternado en celdas con eventos */
 .day-cell.has-events {
   cursor: default;
-  background: #fafafa;
 }
 
-.day-cell.has-events:hover {
-  background: #fafafa;
+.day-cell.has-events:nth-child(8n+2),
+.day-cell.has-events:nth-child(8n+4),
+.day-cell.has-events:nth-child(8n+6),
+.day-cell.has-events:nth-child(8n+8) {
+  background: #f9fafb;
 }
 
-/* Indicador de día actual */
+.day-cell.has-events:not(:nth-child(8n+2)):not(:nth-child(8n+4)):not(:nth-child(8n+6)):not(:nth-child(8n+8)) {
+  background: white;
+}
+
+/* Indicador de día actual con mayor contraste */
 .day-cell.today {
-  background: #eff6ff;
+  background: #dbeafe !important;
+  border-color: #93c5fd;
 }
 
 .day-cell.today:hover {
-  background: #dbeafe;
+  background: #bfdbfe !important;
 }
 
 /* Capa de bloques - CORREGIDA */

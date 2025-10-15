@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
-  z-index: 50;
+  z-index: 1000; /* Aumentado de 50 a 1000 para estar sobre todos los elementos */
   animation: fadeIn 0.2s ease-out;
 }
 

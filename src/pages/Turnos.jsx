@@ -482,10 +482,10 @@ const Turnos = () => {
 
               <form onSubmit={quickCreateMode ? (e) => { e.preventDefault(); handleQuickCreate() } : handleSubmit} className="space-y-4">
                 <div>
-                  <Label htmlFor="persona_id">Persona *</Label>
+                  <Label htmlFor="persona_id" className="text-sm font-medium">Persona *</Label>
                   <select
                     id="persona_id"
-                    className="w-full px-3 py-2 border rounded-md"
+                    className="w-full px-3 py-2 border rounded-md text-sm"
                     value={formData.persona_id}
                     onChange={(e) => setFormData({ ...formData, persona_id: e.target.value })}
                     required
@@ -503,40 +503,43 @@ const Turnos = () => {
                   <>
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <Label htmlFor="fecha">Fecha</Label>
+                        <Label htmlFor="fecha" className="text-sm font-medium">Fecha</Label>
                         <Input
                           id="fecha"
                           type="date"
                           value={formData.fecha}
                           onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
                           required
+                          className="text-sm"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="hora_inicio">Hora Inicio</Label>
+                        <Label htmlFor="hora_inicio" className="text-sm font-medium">Hora Inicio</Label>
                         <Input
                           id="hora_inicio"
                           type="time"
                           value={formData.hora_inicio}
                           onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
                           required
+                          className="text-sm"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="hora_fin">Hora Fin</Label>
+                        <Label htmlFor="hora_fin" className="text-sm font-medium">Hora Fin</Label>
                         <Input
                           id="hora_fin"
                           type="time"
                           value={formData.hora_fin}
                           onChange={(e) => setFormData({ ...formData, hora_fin: e.target.value })}
                           required
+                          className="text-sm"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="hora_almuerzo">Hora Almuerzo (1 hora)</Label>
+                        <Label htmlFor="hora_almuerzo" className="text-sm font-medium">Hora Almuerzo (1 hora)</Label>
                         <select
                           id="hora_almuerzo"
-                          className="w-full px-3 py-2 border rounded-md"
+                          className="w-full px-3 py-2 border rounded-md text-sm"
                           value={formData.hora_almuerzo}
                           onChange={(e) => setFormData({ ...formData, hora_almuerzo: e.target.value })}
                         >
@@ -549,16 +552,16 @@ const Turnos = () => {
                           <option value="14:30">14:30 - 15:30</option>
                           <option value="15:00">15:00 - 16:00</option>
                         </select>
-                        <small className="text-xs text-gray-500">Duración fija: 1 hora. Se dibuja como línea divisoria en el turno.</small>
+                        <small className="text-xs text-gray-500 mt-1 block">Duración fija: 1 hora. Se dibuja como línea divisoria en el turno.</small>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="tipo_turno">Tipo de Turno</Label>
+                        <Label htmlFor="tipo_turno" className="text-sm font-medium">Tipo de Turno</Label>
                         <select
                           id="tipo_turno"
-                          className="w-full px-3 py-2 border rounded-md"
+                          className="w-full px-3 py-2 border rounded-md text-sm"
                           value={formData.tipo_turno}
                           onChange={(e) => setFormData({ ...formData, tipo_turno: e.target.value })}
                         >
@@ -569,10 +572,10 @@ const Turnos = () => {
                         </select>
                       </div>
                       <div>
-                        <Label htmlFor="estado">Estado</Label>
+                        <Label htmlFor="estado" className="text-sm font-medium">Estado</Label>
                         <select
                           id="estado"
-                          className="w-full px-3 py-2 border rounded-md"
+                          className="w-full px-3 py-2 border rounded-md text-sm"
                           value={formData.estado}
                           onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
                         >
@@ -587,30 +590,32 @@ const Turnos = () => {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="puesto">Puesto</Label>
+                        <Label htmlFor="puesto" className="text-sm font-medium">Puesto</Label>
                         <Input
                           id="puesto"
                           value={formData.puesto}
                           onChange={(e) => setFormData({ ...formData, puesto: e.target.value })}
                           placeholder="Ej: Recepción, Instructor, etc."
+                          className="text-sm"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="ubicacion">Ubicación</Label>
+                        <Label htmlFor="ubicacion" className="text-sm font-medium">Ubicación</Label>
                         <Input
                           id="ubicacion"
                           value={formData.ubicacion}
                           onChange={(e) => setFormData({ ...formData, ubicacion: e.target.value })}
                           placeholder="Ej: Punta de Lobos"
+                          className="text-sm"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <Label htmlFor="notas">Notas</Label>
+                      <Label htmlFor="notas" className="text-sm font-medium">Notas</Label>
                       <textarea
                         id="notas"
-                        className="w-full px-3 py-2 border rounded-md"
+                        className="w-full px-3 py-2 border rounded-md text-sm"
                         rows="3"
                         value={formData.notas}
                         onChange={(e) => setFormData({ ...formData, notas: e.target.value })}

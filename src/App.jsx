@@ -5,9 +5,11 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Personas from './pages/Personas'
 import Turnos from './pages/Turnos'
+import Pagos from './pages/Pagos'
 import Registros from './pages/Registros'
 import Reportes from './pages/Reportes'
 import Configuracion from './pages/Configuracion'
+import TestSupabase from './pages/TestSupabase'
 import { Waves } from 'lucide-react'
 import './App.css'
 
@@ -49,9 +51,11 @@ const AppRoutes = () => {
         <Route index element={<Dashboard />} />
         <Route path="personas" element={<Personas />} />
         <Route path="turnos" element={<Turnos />} />
+        <Route path="pagos" element={<Pagos />} />
         <Route path="registros" element={<Registros />} />
         <Route path="reportes" element={<Reportes />} />
         <Route path="configuracion" element={<Configuracion />} />
+        <Route path="test-supabase" element={<TestSupabase />} />
       </Route>
     </Routes>
   )
