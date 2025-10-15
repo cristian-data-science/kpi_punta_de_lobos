@@ -33,19 +33,194 @@ const COLOR_PALETTE = [
 ]
 
 /**
- * Genera un color único y persistente para una persona
- * Usa hash del nombre para consistencia entre sesiones
+ * Diagnóstico completo del sistema de colores
  */
-const generateColorForPerson = (nombre) => {
-  // Hash simple del nombre
-  let hash = 0
-  for (let i = 0; i < nombre.length; i++) {
-    hash = ((hash << 5) - hash) + nombre.charCodeAt(i)
-    hash = hash & hash // Convert to 32bit integer
+export const diagnosticarColores = () => {
+  console.log('\n')
+  console.log('═══════════════════════════════════════════════════════════')
+  console.log('🔍 DIAGNÓSTICO COMPLETO DE SISTEMA DE COLORES')
+  console.log('═══════════════════════════════════════════════════════════')
+  
+  // 1. Leer cache actual
+  const cacheKey = 'schedule_person_colors'
+  let colorCache = {}
+  try {
+    const cached = localStorage.getItem(cacheKey)
+    if (cached) {
+      colorCache = JSON.parse(cached)
+    }
+  } catch (e) {
+    console.error('❌ Error leyendo cache:', e)
   }
   
-  const index = Math.abs(hash) % COLOR_PALETTE.length
-  return COLOR_PALETTE[index]
+  console.log('\n📦 CACHE ACTUAL EN LOCALSTORAGE:')
+  console.log('Total de personas:', Object.keys(colorCache).length)
+  console.log('Contenido completo:', JSON.stringify(colorCache, null, 2))
+  
+  // 2. Analizar cada persona
+  console.log('\n👥 ANÁLISIS POR PERSONA:')
+  const indicesUsados = new Map()
+  
+  Object.entries(colorCache).forEach(([nombre, colorData]) => {
+    const indice = colorData.index
+    console.log(`\n  ${nombre}:`)
+    console.log(`    - Color BG: ${colorData.bg}`)
+    console.log(`    - Índice: ${indice}`)
+    console.log(`    - Border: ${colorData.border}`)
+    console.log(`    - Text: ${colorData.text}`)
+    
+    // Detectar colisiones
+    if (indice !== undefined) {
+      if (indicesUsados.has(indice)) {
+        console.log(`    ⚠️ COLISIÓN DETECTADA con: ${indicesUsados.get(indice)}`)
+      } else {
+        indicesUsados.set(indice, nombre)
+      }
+    }
+  })
+  
+  // 3. Verificar colisiones
+  console.log('\n🔴 COLISIONES DETECTADAS:')
+  const colisiones = []
+  const indiceCount = new Map()
+  
+  Object.entries(colorCache).forEach(([nombre, colorData]) => {
+    const indice = colorData.index
+    if (indice !== undefined) {
+      if (!indiceCount.has(indice)) {
+        indiceCount.set(indice, [])
+      }
+      indiceCount.get(indice).push(nombre)
+    }
+  })
+  
+  indiceCount.forEach((nombres, indice) => {
+    if (nombres.length > 1) {
+      console.log(`  ⚠️ Índice ${indice} usado por: ${nombres.join(', ')}`)
+      colisiones.push({ indice, nombres })
+    }
+  })
+  
+  if (colisiones.length === 0) {
+    console.log('  ✅ No hay colisiones detectadas')
+  }
+  
+  // 4. Paleta de colores disponible
+  console.log('\n🎨 PALETA DE COLORES (12 colores):')
+  COLOR_PALETTE.forEach((color, idx) => {
+    const usado = indiceCount.has(idx)
+    const usadoPor = usado ? indiceCount.get(idx).join(', ') : 'DISPONIBLE'
+    console.log(`  [${idx}] ${color.bg} - ${usadoPor}`)
+  })
+  
+  // 5. Calcular hash para nombres problemáticos
+  console.log('\n🔢 HASH CALCULADO PARA NOMBRES PROBLEMÁTICOS:')
+  const nombresProblem = ['CAMILA', 'CAMILA RIVAS TORRES', 'JUAN PÉREZ', 'NICO', 'CRISTIAN']
+  nombresProblem.forEach(nombre => {
+    let hash = 0
+    for (let i = 0; i < nombre.length; i++) {
+      hash = ((hash << 5) - hash) + nombre.charCodeAt(i)
+      hash = hash & hash
+    }
+    const index = Math.abs(hash * 31) % COLOR_PALETTE.length
+    console.log(`  "${nombre}" → hash: ${hash}, índice calculado: ${index}`)
+  })
+  
+  console.log('\n═══════════════════════════════════════════════════════════')
+  console.log('FIN DEL DIAGNÓSTICO')
+  console.log('═══════════════════════════════════════════════════════════\n')
+  
+  return {
+    totalPersonas: Object.keys(colorCache).length,
+    colisiones,
+    cache: colorCache
+  }
+}
+
+/**
+ * Reconstruye el cache de colores desde cero sin colisiones
+ */
+export const reconstruirCacheColores = () => {
+  console.log('🔄 Reconstruyendo cache de colores...')
+  
+  const cacheKey = 'schedule_person_colors'
+  let colorCache = {}
+  
+  try {
+    const cached = localStorage.getItem(cacheKey)
+    if (cached) {
+      colorCache = JSON.parse(cached)
+    }
+  } catch (e) {
+    console.warn('Error loading cache:', e)
+    colorCache = {}
+  }
+  
+  // Obtener todas las personas del cache viejo
+  const personas = Object.keys(colorCache).sort() // Ordenar alfabéticamente para consistencia
+  
+  console.log('📋 Personas encontradas:', personas)
+  
+  // Reconstruir desde cero con índices secuenciales
+  const nuevoCache = {}
+  let indiceActual = 0
+  
+  personas.forEach(nombre => {
+    const color = COLOR_PALETTE[indiceActual % COLOR_PALETTE.length]
+    nuevoCache[nombre] = { ...color, index: indiceActual }
+    console.log(`  ✅ ${nombre} → índice ${indiceActual}, color: ${color.bg}`)
+    indiceActual++
+  })
+  
+  // Guardar el nuevo cache limpio
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify(nuevoCache))
+    console.log('💾 Cache reconstruido y guardado exitosamente')
+    console.log('🎯 Total:', Object.keys(nuevoCache).length, 'personas con colores únicos')
+  } catch (e) {
+    console.error('Error guardando cache:', e)
+  }
+  
+  return nuevoCache
+}
+
+/**
+ * Limpia el cache de colores (útil para debugging o reset)
+ */
+export const clearColorCache = () => {
+  try {
+    localStorage.removeItem('schedule_person_colors')
+    console.log('✅ Cache de colores limpiado')
+    return true
+  } catch (e) {
+    console.error('Error limpiando cache:', e)
+    return false
+  }
+}
+
+/**
+ * Genera un color único para una persona
+ * Usa asignación secuencial para evitar colisiones
+ */
+const generateColorForPerson = (nombre, usedColors = []) => {
+  // Calcular hash solo como preferencia inicial
+  let hash = 0
+  for (let i = 0; i < nombre.length; i++) {
+    const char = nombre.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash
+  }
+  
+  let preferredIndex = Math.abs(hash * 31) % COLOR_PALETTE.length
+  
+  // Si el color preferido ya está en uso, buscar el siguiente disponible
+  let attempts = 0
+  while (usedColors.includes(preferredIndex) && attempts < COLOR_PALETTE.length) {
+    preferredIndex = (preferredIndex + 1) % COLOR_PALETTE.length
+    attempts++
+  }
+  
+  return { color: COLOR_PALETTE[preferredIndex], index: preferredIndex }
 }
 
 /**
@@ -64,11 +239,31 @@ export const getPersonColor = (nombre) => {
   // Buscar en cache de localStorage
   const cacheKey = 'schedule_person_colors'
   let colorCache = {}
+  let needsRebuild = false
   
   try {
     const cached = localStorage.getItem(cacheKey)
     if (cached) {
       colorCache = JSON.parse(cached)
+      
+      // VERIFICAR COLISIONES en el cache
+      const indicesUsados = new Map()
+      Object.entries(colorCache).forEach(([name, colorData]) => {
+        const idx = colorData.index
+        if (idx !== undefined) {
+          if (indicesUsados.has(idx)) {
+            console.warn(`⚠️ Colisión detectada: índice ${idx} usado por "${indicesUsados.get(idx)}" y "${name}"`)
+            needsRebuild = true
+          }
+          indicesUsados.set(idx, name)
+        }
+      })
+      
+      // Si hay colisiones, reconstruir automáticamente
+      if (needsRebuild) {
+        console.error('� Cache corrupto con colisiones detectadas. Reconstruyendo...')
+        colorCache = reconstruirCacheColores()
+      }
     }
   } catch (e) {
     console.warn('Error loading color cache:', e)
@@ -79,9 +274,16 @@ export const getPersonColor = (nombre) => {
     return colorCache[nombreNormalizado]
   }
   
-  // Generar nuevo color y guardarlo
-  const newColor = generateColorForPerson(nombreNormalizado)
-  colorCache[nombreNormalizado] = newColor
+  // Obtener índices ya usados (ahora garantizados sin colisiones)
+  const usedIndices = Object.values(colorCache).map(c => c.index)
+  
+  // Generar nuevo color evitando colisiones
+  const { color: newColor, index } = generateColorForPerson(nombreNormalizado, usedIndices)
+  
+  console.log(`✅ ${nombreNormalizado} → índice ${index}, color:`, newColor.bg)
+  
+  // Guardar con el índice
+  colorCache[nombreNormalizado] = { ...newColor, index }
   
   try {
     localStorage.setItem(cacheKey, JSON.stringify(colorCache))
@@ -211,6 +413,19 @@ export const turnosToBlocks = (turnos, weekStart) => {
       ? turno.hora_almuerzo.substring(0, 5) 
       : null
     
+    // ⚠️ NORMALIZAR hora_inicio y hora_fin: pueden venir como "HH:mm:ss" de Postgres
+    const horaInicioNormalizada = turno.hora_inicio 
+      ? turno.hora_inicio.substring(0, 5) 
+      : '09:00'
+    
+    const horaFinNormalizada = turno.hora_fin 
+      ? turno.hora_fin.substring(0, 5) 
+      : '18:00'
+    
+    console.log('⏰ Turno:', turno.persona?.nombre, 
+                '| Raw:', turno.hora_inicio, '-', turno.hora_fin,
+                '| Normalizado:', horaInicioNormalizada, '-', horaFinNormalizada)
+    
     if (horaAlmuerzoNormalizada) {
       console.log('🍽️ Turno con almuerzo:', turno.persona?.nombre, '→', horaAlmuerzoNormalizada)
     }
@@ -219,8 +434,8 @@ export const turnosToBlocks = (turnos, weekStart) => {
     blocks.push({
       id: turno.id,
       day,
-      start: turno.hora_inicio,
-      end: turno.hora_fin,
+      start: horaInicioNormalizada,
+      end: horaFinNormalizada,
       label: isLunch ? 'Almuerzo' : label,
       role: turno.puesto || '',
       type: isLunch ? 'lunch' : 'shift',

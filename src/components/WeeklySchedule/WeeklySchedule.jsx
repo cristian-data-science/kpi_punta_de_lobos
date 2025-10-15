@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -6,7 +6,9 @@ import {
   getColorForLabel,
   parseTimeToMinutes,
   formatWeekRange,
-  formatDayWithDate
+  formatDayWithDate,
+  diagnosticarColores,
+  reconstruirCacheColores
 } from '@/utils/scheduleHelpers'
 import './WeeklySchedule.css'
 
@@ -31,6 +33,16 @@ const WeeklySchedule = ({
   // Asignar carriles a los eventos
   const eventsWithLanes = useMemo(() => {
     return assignLanes(events)
+  }, [events])
+
+  // Ejecutar diagnóstico después del render (solo en desarrollo)
+  useEffect(() => {
+    if (events.length > 0) {
+      // Esperar un momento para que todo se renderice
+      setTimeout(() => {
+        diagnosticarColores()
+      }, 500)
+    }
   }, [events])
 
   // Calcular el día actual para resaltarlo
@@ -82,8 +94,8 @@ const WeeklySchedule = ({
       const startHourOffset = Math.floor(startMinutes / 60) - startHour
       const minutesIntoHour = startMinutes % 60
       
-      // Posición vertical con offset del header - USAR HOUR_HEIGHT
-      const top = HEADER_HEIGHT + (startHourOffset * HOUR_HEIGHT) + (minutesIntoHour / 60) * HOUR_HEIGHT
+      // Posición vertical SIN sumar HEADER_HEIGHT porque la capa blocks-layer ya tiene top:48px en CSS
+      const top = (startHourOffset * HOUR_HEIGHT) + (minutesIntoHour / 60) * HOUR_HEIGHT
       const height = (durationMinutes / 60) * HOUR_HEIGHT - 3 // Ajuste para alineación perfecta con grid
       
       // Cálculo de posición horizontal
@@ -107,7 +119,7 @@ const WeeklySchedule = ({
         blockWidth = laneWidthPercent - 0.2 // Pequeño gap entre carriles
       }
       
-      // Obtener color
+      // Obtener color basado en el nombre de la persona
       const colors = getColorForLabel(event.label, event.type, event.person)
       
       const style = {
@@ -188,7 +200,7 @@ const WeeklySchedule = ({
       
       return (
         <div
-          key={event.id}
+          key={`${event.id}-${event.person}-${event.day}`}
           className={`schedule-block ${event.type === 'lunch' ? 'lunch' : ''}`}
           style={style}
           onClick={() => {
