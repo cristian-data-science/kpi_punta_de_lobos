@@ -1,0 +1,322 @@
+/* 🗓️ Estilos para Calendario Semanal con Carriles Paralelos */
+
+.weekly-schedule {
+  width: 100%;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.schedule-header {
+  background: #f8f9fa;
+  padding: 16px 20px;
+  border-bottom: 2px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.schedule-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.week-navigation {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.week-range {
+  font-size: 14px;
+  color: #6b7280;
+  min-width: 200px;
+  text-align: center;
+}
+
+.schedule-grid-container {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 700px;
+  position: relative;
+}
+
+.schedule-grid {
+  display: grid;
+  grid-template-columns: 60px repeat(7, minmax(120px, 1fr));
+  min-width: 900px;
+  position: relative;
+}
+
+/* Cabecera de días - MÁS COMPACTA */
+.day-header {
+  background: linear-gradient(to bottom, #f8f9fa 0%, #f3f4f6 100%);
+  border: 1px solid #e5e7eb;
+  border-top: none;
+  padding: 6px 8px; /* Reducido de 8px */
+  text-align: center;
+  font-weight: 600;
+  color: #374151;
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: 48px; /* Reducido de 56px a 48px */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px; /* Reducido de 2px */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.day-header.hour-label {
+  background: white;
+  border-left: none;
+  box-shadow: none;
+}
+
+.day-name {
+  font-size: 10px; /* Reducido de 11px */
+  letter-spacing: 0.5px;
+  color: #6b7280;
+}
+
+.day-date {
+  font-size: 16px; /* Reducido de 18px */
+  font-weight: 700;
+  color: #1f2937;
+  line-height: 1;
+}
+
+/* Columna de horas - MÁS COMPACTO */
+.hour-cell {
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-left: none;
+  padding: 4px 4px;
+  text-align: center;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px; /* Reducido de 52px a 44px para compactar */
+}
+
+/* Celdas del día - MÁS COMPACTAS */
+.day-cell {
+  border: 1px solid #e5e7eb;
+  position: relative;
+  height: 44px; /* Reducido de 52px a 44px */
+  background: white;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.day-cell:hover {
+  background: #f0f9ff;
+  border-color: #bfdbfe;
+}
+
+.day-cell.has-events {
+  cursor: default;
+  background: #fafafa;
+}
+
+.day-cell.has-events:hover {
+  background: #fafafa;
+}
+
+/* Indicador de día actual */
+.day-cell.today {
+  background: #eff6ff;
+}
+
+.day-cell.today:hover {
+  background: #dbeafe;
+}
+
+/* Capa de bloques - CORREGIDA */
+.blocks-layer {
+  position: absolute;
+  top: 48px; /* Altura del header (HEADER_HEIGHT) */
+  left: 60px; /* Ancho de columna de horas */
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.blocks-layer > * {
+  pointer-events: auto;
+}
+
+/* Bloque de turno - MÁS COMPACTO */
+.schedule-block {
+  position: absolute;
+  border-radius: 5px; /* Reducido de 6px */
+  padding: 4px 6px; /* Reducido de 6px 8px */
+  font-size: 11px; /* AUMENTADO de 10px a 11px para mejor legibilidad */
+  font-weight: 600;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+  z-index: 1;
+  user-select: none;
+}
+
+.schedule-block:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18), 0 2px 4px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+}
+
+.schedule-block:active {
+  transform: translateY(-1px) scale(1.01);
+  transition: all 0.1s;
+}
+
+/* Bloque de ALMUERZO - Estilo especial blanco */
+.schedule-block.lunch {
+  background: #ffffff !important;
+  border: 2px dashed #cbd5e1 !important;
+  border-left: 3px solid #94a3b8 !important;
+  color: #64748b !important;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: default;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.schedule-block.lunch:hover {
+  transform: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  z-index: 1;
+}
+
+/* Tooltip al hacer hover */
+.schedule-block-tooltip {
+  position: absolute;
+  background: #1f2937;
+  color: white;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.schedule-block-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 10px;
+  width: 8px;
+  height: 8px;
+  background: #1f2937;
+  transform: rotate(45deg);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Indicador de día actual */
+.day-cell.today {
+  background: #eff6ff;
+}
+
+.day-header.today {
+  background: linear-gradient(to bottom, #dbeafe 0%, #bfdbfe 100%);
+}
+
+.day-header.today .day-name {
+  color: #1e40af;
+}
+
+.day-header.today .day-date {
+  color: #1e3a8a;
+}
+
+/* Estilos responsive */
+@media (max-width: 1024px) {
+  .schedule-grid {
+    min-width: 800px;
+  }
+  
+  .day-cell {
+    height: 48px;
+  }
+  
+  .hour-cell {
+    height: 48px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 768px) {
+  .schedule-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .week-navigation {
+    justify-content: center;
+  }
+  
+  .schedule-grid {
+    min-width: 700px;
+  }
+  
+  .schedule-grid-container {
+    max-height: 500px;
+  }
+}
+
+/* Estado vacío */
+.schedule-empty {
+  padding: 60px 20px;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.schedule-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.schedule-empty-text {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.schedule-empty-hint {
+  font-size: 14px;
+  color: #d1d5db;
+}
