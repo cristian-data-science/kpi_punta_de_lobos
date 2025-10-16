@@ -320,6 +320,12 @@ export const mapPersonaToLabel = (nombre) => {
  * Convierte tiempo "HH:mm" a minutos desde medianoche
  */
 export const parseTimeToMinutes = (timeString) => {
+  // Validar que timeString existe y es un string
+  if (!timeString || typeof timeString !== 'string') {
+    console.warn('⚠️ parseTimeToMinutes: timeString inválido:', timeString)
+    return 0
+  }
+  
   const [hours, minutes] = timeString.split(':').map(Number)
   return hours * 60 + minutes
 }
@@ -481,6 +487,12 @@ export const assignLanes = (blocks) => {
     
     // Ordenar por hora de inicio, luego por duración (más largos primero)
     dayBlocks.sort((a, b) => {
+      // Validar que los bloques tienen start y end
+      if (!a.start || !a.end || !b.start || !b.end) {
+        console.warn('⚠️ Bloque sin start/end:', { a, b })
+        return 0
+      }
+      
       const startDiff = parseTimeToMinutes(a.start) - parseTimeToMinutes(b.start)
       if (startDiff !== 0) return startDiff
       
@@ -564,10 +576,13 @@ export const formatDayWithDate = (weekStart, dayIndex) => {
   const dayNames = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO']
   const dayNum = dayDate.getDate()
   
+  // Usar módulo para ciclar los nombres de días cuando dayIndex > 6
+  const dayNameIndex = dayIndex % 7
+  
   return {
-    name: dayNames[dayIndex],
+    name: dayNames[dayNameIndex],
     date: dayNum,
-    full: `${dayNames[dayIndex]} ${dayNum}`
+    full: `${dayNames[dayNameIndex]} ${dayNum}`
   }
 }
 

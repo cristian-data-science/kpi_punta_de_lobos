@@ -9,7 +9,9 @@ import {
   Waves,
   Clock,
   Database,
-  DollarSign
+  DollarSign,
+  CalendarCheck,
+  FileText
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -35,6 +37,20 @@ const Sidebar = ({ isOpen, onClose }) => {
       label: 'Turnos',
       description: 'Gestión de turnos',
       color: 'from-emerald-500 to-teal-500'
+    },
+    { 
+      path: '/reporte-turnos', 
+      icon: FileText, 
+      label: 'Reporte Turnos',
+      description: 'Análisis de turnos',
+      color: 'from-purple-500 to-indigo-500'
+    },
+    { 
+      path: '/programacion-turnos', 
+      icon: CalendarCheck, 
+      label: 'Programación',
+      description: 'Asignación de turnos',
+      color: 'from-violet-500 to-purple-500'
     },
     { 
       path: '/pagos', 

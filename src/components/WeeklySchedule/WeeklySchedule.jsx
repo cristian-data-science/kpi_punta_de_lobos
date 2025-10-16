@@ -14,6 +14,7 @@ import './WeeklySchedule.css'
 
 const DAYS = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO']
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 8) // 8:00 to 21:00 (14 horas)
+const HOURS_4H_BLOCKS = [8, 12, 16, 20] // Bloques de 4 horas: 8-12, 12-16, 16-20, 20-24
 const HEADER_HEIGHT = 48 // Altura del header reducida (antes 56px)
 const HOUR_HEIGHT = 44 // Altura de cada celda de hora (REDUCIDO para compactar)
 
@@ -25,10 +26,64 @@ const WeeklySchedule = ({
   onNextWeek,
   onPreviousWeek,
   startHour = 8,
-  endHour = 21
+  endHour = 21,
+  daysToShow = 7, // Número de días a mostrar (7, 14, 28, 56)
+  viewMode = 'semanal' // semanal, bisemanal, mensual, bimensual
 }) => {
   const [hoveredBlock, setHoveredBlock] = useState(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+
+  // Calcular número de semanas a mostrar
+  const weeksToShow = useMemo(() => {
+    return Math.ceil(daysToShow / 7)
+  }, [daysToShow])
+
+  // Determinar qué horas usar según la vista
+  const hoursToShow = useMemo(() => {
+    if (viewMode === 'mensual' || viewMode === 'bimensual') {
+      return HOURS_4H_BLOCKS // Bloques de 4 horas para vistas largas
+    }
+    return HOURS // Horas normales para vistas cortas
+  }, [viewMode])
+
+  // Calcular altura dinámica por semana
+  const weekHeight = useMemo(() => {
+    const baseHeight = 700 // Altura base total del calendario
+    const headerHeight = 48 // Altura del header de cada semana
+    const marginBetweenWeeks = 20 // Margen entre semanas
+    
+    // Altura disponible para todas las semanas (sin headers ni márgenes)
+    const availableHeight = baseHeight - (weeksToShow * headerHeight) - ((weeksToShow - 1) * marginBetweenWeeks)
+    
+    // Altura por semana (mínimo 200px para que sea usable)
+    const calculatedHeight = Math.max(200, Math.floor(availableHeight / weeksToShow))
+    
+    return calculatedHeight
+  }, [weeksToShow])
+
+  // Calcular altura de cada celda de hora dinámicamente
+  const dynamicHourHeight = useMemo(() => {
+    const hoursCount = hoursToShow.length
+    return Math.floor(weekHeight / hoursCount)
+  }, [weekHeight, hoursToShow])
+
+  // Generar estructura de semanas
+  const weeksStructure = useMemo(() => {
+    const weeks = []
+    for (let week = 0; week < weeksToShow; week++) {
+      const weekDays = []
+      for (let day = 0; day < 7; day++) {
+        const dayIndex = week * 7 + day
+        if (dayIndex < daysToShow) {
+          weekDays.push(dayIndex)
+        }
+      }
+      if (weekDays.length > 0) {
+        weeks.push(weekDays)
+      }
+    }
+    return weeks
+  }, [daysToShow, weeksToShow])
 
   // Asignar carriles a los eventos
   const eventsWithLanes = useMemo(() => {
@@ -45,6 +100,17 @@ const WeeklySchedule = ({
     }
   }, [events])
 
+  // Calcular título dinámico según la vista
+  const scheduleTitle = useMemo(() => {
+    const titles = {
+      'semanal': '📅 Vista Semanal',
+      'bisemanal': '📅 Vista Bi-semanal', 
+      'mensual': '📅 Vista Mensual',
+      'bimensual': '📅 Vista Bi-mensual'
+    }
+    return titles[viewMode] || '📅 Calendario'
+  }, [viewMode])
+
   // Calcular el día actual para resaltarlo
   const today = new Date().toISOString().split('T')[0]
   const todayDayOfWeek = useMemo(() => {
@@ -55,8 +121,8 @@ const WeeklySchedule = ({
     return diff >= 0 && diff <= 6 ? diff : -1
   }, [weekStart, today])
 
-  // Renderizar celda de día
-  const renderDayCell = (day, hour) => {
+    // Renderizar celda de día
+  const renderDayCell = (day, hour, hourHeight = HOUR_HEIGHT) => {
     const cellEvents = eventsWithLanes.filter(event => {
       const eventDay = event.day
       const eventStartHour = Math.floor(parseTimeToMinutes(event.start) / 60)
@@ -75,13 +141,89 @@ const WeeklySchedule = ({
     
     return (
       <div
-        key={`${day}-${hour}`}
-        className={`day-cell ${cellEvents.length > 0 ? 'has-events' : ''} ${isToday ? 'today' : ''}`}
+        key={`cell-${day}-${hour}`}
+        className={`day-cell ${isToday ? 'today' : ''} ${cellEvents.length > 0 ? 'has-events' : ''}`}
         onClick={handleCellClick}
+        style={{ height: `${hourHeight}px` }}
       >
-        {/* Los bloques se renderizan con posición absoluta */}
+        {/* Contenido de la celda si es necesario */}
       </div>
     )
+  }
+
+  // Renderizar bloques para una semana específica
+  const renderBlocksForWeek = (weekDays) => {
+    return eventsWithLanes
+      .filter(event => weekDays.includes(event.day))
+      .map(event => {
+        const startMinutes = parseTimeToMinutes(event.start)
+        const endMinutes = parseTimeToMinutes(event.end)
+        const durationMinutes = endMinutes - startMinutes
+        
+        // Usar la misma lógica para todas las vistas - funciona en semanal
+        const startHourOffset = Math.floor(startMinutes / 60) - startHour
+        const minutesIntoHour = startMinutes % 60
+        
+        const top = (startHourOffset * dynamicHourHeight) + (minutesIntoHour / 60) * dynamicHourHeight
+        const height = (durationMinutes / 60) * dynamicHourHeight - 3
+        
+        // Ajustar la posición del día dentro de la semana
+        const dayIndexInWeek = weekDays.indexOf(event.day)
+        const dayWidthPercent = 100 / 7
+        const dayBaseLeft = dayIndexInWeek * dayWidthPercent
+        
+        let blockLeft, blockWidth
+        
+        if (event.totalLanes === 1) {
+          const marginPercent = dayWidthPercent * 0.05
+          blockLeft = dayBaseLeft + marginPercent
+          blockWidth = dayWidthPercent * 0.90
+        } else {
+          const laneWidthPercent = dayWidthPercent / event.totalLanes
+          const laneOffset = event.lane * laneWidthPercent
+          blockLeft = dayBaseLeft + laneOffset
+          blockWidth = laneWidthPercent - 0.2
+        }
+        
+        const colors = getColorForLabel(event.label, event.type, event.person)
+        
+        const style = {
+          position: 'absolute',
+          top: `${top}px`,
+          left: `${blockLeft}%`,
+          width: `${blockWidth}%`,
+          height: `${height}px`,
+          backgroundColor: colors.bg,
+          color: colors.text,
+          borderLeft: `3px solid ${colors.border}`,
+          borderRadius: '5px',
+          padding: '3px 6px',
+          fontSize: '11px',
+          fontWeight: '600',
+          cursor: 'pointer',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          zIndex: 10,
+        }
+        
+        return (
+          <div
+            key={`block-${event.id}-week`}
+            style={style}
+            onClick={() => onBlockClick && onBlockClick(event)}
+          >
+            <div className="block-content">
+              <div className="block-label">{event.label}</div>
+              <div className="block-time">{event.start}-{event.end}</div>
+            </div>
+          </div>
+        )
+      })
   }
 
   // Renderizar todos los bloques en una capa superior
@@ -310,7 +452,7 @@ const WeeklySchedule = ({
     <div className="weekly-schedule">
       {/* Cabecera */}
       <div className="schedule-header">
-        <h3>📅 Calendario Semanal</h3>
+        <h3>{scheduleTitle}</h3>
         <div className="week-navigation">
           <Button
             variant="outline"
@@ -331,36 +473,63 @@ const WeeklySchedule = ({
       </div>
 
       {/* Grilla del calendario */}
-      <div className="schedule-grid-container">
-        <div className="schedule-grid">
-          {/* Cabecera de días */}
-          <div className="day-header hour-label"></div>
-          {DAYS.map((day, index) => {
-            const dayInfo = formatDayWithDate(weekStart, index)
-            const isToday = index === todayDayOfWeek
-            return (
-              <div key={day} className={`day-header ${isToday ? 'today' : ''}`}>
-                <div className="day-name">{dayInfo.name}</div>
-                <div className="day-date">{dayInfo.date}</div>
-              </div>
-            )
-          })}
+      <div 
+        className="schedule-grid-container"
+        style={{ 
+          maxHeight: '700px',
+          overflowY: 'auto',
+          overflowX: 'auto'
+        }}
+      >
+        {weeksStructure.map((weekDays, weekIndex) => (
+          <div 
+            key={`week-${weekIndex}`}
+            className="schedule-grid"
+            style={{
+              gridTemplateColumns: `60px repeat(7, minmax(120px, 1fr))`,
+              minWidth: `${60 + (7 * 120)}px`,
+              marginBottom: weekIndex < weeksStructure.length - 1 ? '20px' : '0',
+              height: `${weekHeight + 48}px`, // +48px para el header
+              '--dynamic-hour-height': `${dynamicHourHeight}px`
+            }}
+          >
+            {/* Cabecera de días para esta semana */}
+            <div className="day-header hour-label">
+              {weekIndex === 0 ? '' : `Sem ${weekIndex + 1}`}
+            </div>
+            {weekDays.map((dayIndex) => {
+              const dayInfo = formatDayWithDate(weekStart, dayIndex)
+              const isToday = dayIndex === todayDayOfWeek
+              return (
+                <div key={`day-${dayIndex}`} className={`day-header ${isToday ? 'today' : ''}`}>
+                  <div className="day-name">{dayInfo.name}</div>
+                  <div className="day-date">{dayInfo.date}</div>
+                </div>
+              )
+            })}
 
-          {/* Filas de horas */}
-          {HOURS.map(hour => (
-            <React.Fragment key={`hour-row-${hour}`}>
-              <div key={`hour-${hour}`} className="hour-cell">
-                {`${String(hour).padStart(2, '0')}:00`}
-              </div>
-              {[0, 1, 2, 3, 4, 5, 6].map(day => renderDayCell(day, hour))}
-            </React.Fragment>
-          ))}
-        </div>
+            {/* Filas de horas para esta semana */}
+            {hoursToShow.map(hour => (
+              <React.Fragment key={`week-${weekIndex}-hour-${hour}`}>
+                <div 
+                  className="hour-cell"
+                  style={{ height: `${dynamicHourHeight}px` }}
+                >
+                  {viewMode === 'mensual' || viewMode === 'bimensual' ? 
+                    `${String(hour).padStart(2, '0')}:00-${String(hour + 4).padStart(2, '0')}:00` :
+                    `${String(hour).padStart(2, '0')}:00`
+                  }
+                </div>
+                {weekDays.map((dayIndex) => renderDayCell(dayIndex, hour, dynamicHourHeight))}
+              </React.Fragment>
+            ))}
 
-        {/* Capa de bloques - CORREGIDA: posición relativa al contenedor */}
-        <div className="blocks-layer">
-          {renderAllBlocks()}
-        </div>
+            {/* Capa de bloques para esta semana */}
+            <div className="blocks-layer">
+              {renderBlocksForWeek(weekDays)}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Tooltip */}
