@@ -28,6 +28,7 @@ const Personas = () => {
     telefono: '',
     tipo: 'visitante',
     estado: 'activo',
+    tarifa_hora: 8000,
     notas: ''
   })
 
@@ -116,6 +117,7 @@ const Personas = () => {
       telefono: persona.telefono || '',
       tipo: persona.tipo || 'visitante',
       estado: persona.estado || 'activo',
+      tarifa_hora: persona.tarifa_hora || 8000,
       notas: persona.notas || ''
     })
     setShowModal(true)
@@ -150,6 +152,7 @@ const Personas = () => {
       telefono: '',
       tipo: 'visitante',
       estado: 'activo',
+      tarifa_hora: 8000,
       notas: ''
     })
   }
@@ -263,6 +266,11 @@ const Personas = () => {
                               {persona.telefono}
                             </p>
                           )}
+                          {persona.tarifa_hora && (
+                            <p className="text-green-600 font-medium">
+                              Tarifa: ${parseInt(persona.tarifa_hora).toLocaleString('es-CL')}/hora
+                            </p>
+                          )}
                           {persona.notas && (
                             <p className="text-xs mt-2 text-gray-500">{persona.notas}</p>
                           )}
@@ -362,6 +370,19 @@ const Personas = () => {
                     <option value="activo">Activo</option>
                     <option value="inactivo">Inactivo</option>
                   </select>
+                </div>
+                <div className="md:col-span-2">
+                  <Label htmlFor="tarifa_hora">Tarifa por Hora (CLP)</Label>
+                  <Input
+                    id="tarifa_hora"
+                    type="number"
+                    value={formData.tarifa_hora}
+                    onChange={(e) => setFormData({ ...formData, tarifa_hora: parseInt(e.target.value) || 0 })}
+                    placeholder="Ej: 5250, 8000, 12500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Monto en pesos chilenos que cobra esta persona por hora de trabajo. Puede ser cualquier valor (ej: 5250, 8000, 12500).
+                  </p>
                 </div>
               </div>
               <div>

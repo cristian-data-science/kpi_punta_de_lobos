@@ -138,7 +138,7 @@ const ReporteTurnos = () => {
       const nombre = persona?.nombre || 'Sin asignar'
       
       // Obtener tarifa por persona si existe, sino usar estándar
-      const tarifaPorHora = persona?.tarifa_por_hora || 8000 // Tarifa estándar
+      const tarifaPorHora = persona?.tarifa_hora || 8000 // Tarifa estándar
       const horaInicio = turno.hora_inicio ? parseInt(turno.hora_inicio.split(':')[0]) : 9
       const horaFin = turno.hora_fin ? parseInt(turno.hora_fin.split(':')[0]) : 17
       const horasTrabajadas = horaFin - horaInicio
