@@ -578,6 +578,96 @@ export const unsubscribe = (subscription) => {
   }
 }
 
+// =========================================
+// 👷 FUNCIONES PARA TRABAJADORES
+// =========================================
+
+/**
+ * 🔍 Busca una persona por RUT (para login de trabajadores)
+ */
+export const getPersonaByRut = async (rut) => {
+  const supabase = getSupabaseClient()
+  
+  console.log('🔍 Buscando persona con RUT:', rut)
+  
+  // Intentar búsqueda con RUT normalizado (sin puntos ni guiones)
+  const rutNormalizado = rut.replace(/[.-]/g, '').toUpperCase()
+  console.log('   RUT normalizado:', rutNormalizado)
+  
+  let { data, error } = await supabase
+    .from('personas')
+    .select('*')
+    .eq('rut', rutNormalizado)
+    .maybeSingle()
+
+  // Si no se encontró, intentar con el RUT original (con puntos y guiones)
+  if (!data && !error) {
+    console.log('   No encontrado normalizado, intentando con formato original:', rut)
+    const result = await supabase
+      .from('personas')
+      .select('*')
+      .eq('rut', rut.toUpperCase())
+      .maybeSingle()
+    
+    data = result.data
+    error = result.error
+  }
+
+  // Si aún no se encontró, buscar con ilike para ser más flexible
+  if (!data && !error) {
+    console.log('   Intentando búsqueda flexible con ilike')
+    const result = await supabase
+      .from('personas')
+      .select('*')
+      .ilike('rut', rut.replace(/[.-]/g, '').toUpperCase())
+      .maybeSingle()
+    
+    data = result.data
+    error = result.error
+  }
+
+  if (data) {
+    console.log('   ✅ Persona encontrada:', data.nombre, '- RUT en BD:', data.rut)
+  } else {
+    console.log('   ❌ No se encontró persona con ese RUT')
+  }
+
+  return { data, error }
+}
+
+/**
+ * 📅 Obtiene turnos de un trabajador específico por ID de persona
+ */
+export const getTurnosByPersonaId = async (personaId, filters = {}) => {
+  const supabase = getSupabaseClient()
+  
+  let query = supabase
+    .from('turnos')
+    .select(`
+      *,
+      persona:personas(id, nombre, rut, tipo)
+    `)
+    .eq('persona_id', personaId)
+    .order('fecha', { ascending: true })
+
+  // Aplicar filtros opcionales
+  if (filters.fechaDesde) {
+    query = query.gte('fecha', filters.fechaDesde)
+  }
+  
+  if (filters.fechaHasta) {
+    query = query.lte('fecha', filters.fechaHasta)
+  }
+  
+  if (filters.estado) {
+    query = query.eq('estado', filters.estado)
+  }
+
+  const { data, error } = await query
+
+  return { data, error }
+}
+
 export default {
   checkSupabaseConnection,
   getPersonas,
@@ -600,5 +690,8 @@ export default {
   getConfiguracion,
   updateConfiguracion,
   subscribeToTable,
-  unsubscribe
+  unsubscribe,
+  // Funciones para trabajadores
+  getPersonaByRut,
+  getTurnosByPersonaId
 }

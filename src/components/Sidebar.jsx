@@ -58,13 +58,6 @@ const Sidebar = ({ isOpen, onClose }) => {
       color: 'from-orange-500 to-red-500'
     },
     { 
-      path: '/test-supabase', 
-      icon: Database, 
-      label: 'Test Supabase',
-      description: 'Prueba de conexión BD',
-      color: 'from-green-500 to-emerald-500'
-    },
-    { 
       path: '/configuracion', 
       icon: Settings, 
       label: 'Configuración',

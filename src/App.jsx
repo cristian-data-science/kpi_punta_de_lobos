@@ -1,7 +1,10 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { TrabajadorProvider } from './contexts/TrabajadorContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import LoginTrabajador from './pages/LoginTrabajador'
+import TurnosViewer from './pages/TurnosViewer'
 import Dashboard from './pages/Dashboard'
 import Personas from './pages/Personas'
 import Turnos from './pages/Turnos'
@@ -63,11 +66,26 @@ const AppRoutes = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
-    </AuthProvider>
+    <Router>
+      <Routes>
+        {/* Rutas públicas para trabajadores */}
+        <Route path="/trabajador/*" element={
+          <TrabajadorProvider>
+            <Routes>
+              <Route path="login" element={<LoginTrabajador />} />
+              <Route path="turnos" element={<TurnosViewer />} />
+            </Routes>
+          </TrabajadorProvider>
+        } />
+
+        {/* Rutas de administración (requieren autenticación completa) */}
+        <Route path="/*" element={
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        } />
+      </Routes>
+    </Router>
   )
 }
 

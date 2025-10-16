@@ -163,6 +163,8 @@ const Personas = () => {
       guia: 'bg-green-100 text-green-700',
       staff: 'bg-purple-100 text-purple-700',
       instructor: 'bg-orange-100 text-orange-700',
+      guarda_parque: 'bg-emerald-100 text-emerald-700',
+      baño: 'bg-cyan-100 text-cyan-700',
       otro: 'bg-gray-100 text-gray-700'
     }
     return colors[tipo] || colors.otro
@@ -246,7 +248,9 @@ const Personas = () => {
                         <div className="flex items-center gap-2 mb-2">
                           <h3 className="text-lg font-semibold">{persona.nombre}</h3>
                           <Badge className={getTipoBadgeColor(persona.tipo)}>
-                            {persona.tipo}
+                            {persona.tipo === 'guarda_parque' ? 'Guarda Parque' : 
+                             persona.tipo === 'baño' ? 'Baño' : 
+                             persona.tipo}
                           </Badge>
                           {persona.estado === 'inactivo' && (
                             <Badge variant="destructive">Inactivo</Badge>
@@ -356,6 +360,8 @@ const Personas = () => {
                     <option value="guia">Guía</option>
                     <option value="staff">Staff</option>
                     <option value="instructor">Instructor</option>
+                    <option value="guarda_parque">Guarda Parque</option>
+                    <option value="baño">Baño</option>
                     <option value="otro">Otro</option>
                   </select>
                 </div>
