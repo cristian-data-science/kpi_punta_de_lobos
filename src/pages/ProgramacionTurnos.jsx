@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
   Calendar, Clock, Users, CheckCircle2, AlertCircle, Plus, RefreshCw, 
-  Settings, TrendingUp, DollarSign, CalendarDays, UserCheck, XCircle 
+  Settings, TrendingUp, DollarSign, CalendarDays, UserCheck, XCircle,
+  Zap, Target, Activity, MapPin 
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,6 +43,12 @@ const ProgramacionTurnos = () => {
   const [currentWeekStart, setCurrentWeekStart] = useState(getWeekStart(new Date()))
   const [showModal, setShowModal] = useState(false)
   const [turnoSeleccionado, setTurnoSeleccionado] = useState(null)
+  
+  // Estados del modal de programación masiva
+  const [showProgramacionModal, setShowProgramacionModal] = useState(false)
+  const [fechaInicio, setFechaInicio] = useState('')
+  const [fechaFin, setFechaFin] = useState('')
+  const [asignacionesMockup, setAsignacionesMockup] = useState({})
 
   // Calcular el inicio del período según la vista (DESPUÉS de currentWeekStart)
   const currentPeriodStart = useMemo(() => {
@@ -357,6 +364,107 @@ const ProgramacionTurnos = () => {
     setCurrentWeekStart(getWeekStart(new Date()))
   }
 
+  // Funciones del mockup de programación masiva
+  const tiposTurno = ['GP1', 'GP2', 'GP3', 'GP4', 'Voluntario']
+  
+  const personasMockup = personas.length > 0 ? personas : [
+    { id: 1, nombre: 'Carlos Mendoza', tipo: 'staff', rut: '12.345.678-9' },
+    { id: 2, nombre: 'María Silva', tipo: 'guia', rut: '23.456.789-0' },
+    { id: 3, nombre: 'Pedro González', tipo: 'instructor', rut: '34.567.890-1' },
+    { id: 4, nombre: 'Ana Torres', tipo: 'voluntario', rut: '45.678.901-2' },
+    { id: 5, nombre: 'Luis Ramírez', tipo: 'staff', rut: '56.789.012-3' }
+  ]
+
+  const calcularEstadisticasRango = () => {
+    if (!fechaInicio || !fechaFin) return null
+
+    const inicio = new Date(fechaInicio)
+    const fin = new Date(fechaFin)
+    const diasTotales = Math.ceil((fin - inicio) / (1000 * 60 * 60 * 24)) + 1
+    
+    let diasSemana = 0
+    let diasFinSemana = 0
+    
+    for (let d = new Date(inicio); d <= fin; d.setDate(d.getDate() + 1)) {
+      const diaSemana = d.getDay()
+      if (diaSemana === 0 || diaSemana === 6) {
+        diasFinSemana++
+      } else {
+        diasSemana++
+      }
+    }
+
+    const turnosAsignados = Object.keys(asignacionesMockup).length
+    const personasAsignadas = new Set(Object.values(asignacionesMockup)).size
+    const turnosSinAsignar = tiposTurno.length - turnosAsignados
+    
+    // Simular cobertura necesaria (3 turnos por día)
+    const coberturaRequerida = diasTotales * 3 // 3 turnos por día
+    const coberturaPendiente = Math.max(0, coberturaRequerida - turnosAsignados)
+    
+    return {
+      diasTotales,
+      diasSemana,
+      diasFinSemana,
+      turnosAsignados,
+      turnosSinAsignar,
+      personasAsignadas,
+      coberturaRequerida,
+      coberturaPendiente,
+      porcentajeCobertura: coberturaRequerida > 0 ? (turnosAsignados / coberturaRequerida * 100).toFixed(1) : 0
+    }
+  }
+
+  const handleAsignarTipoTurno = (tipoTurno, personaId) => {
+    console.log('Asignando:', tipoTurno, 'a persona:', personaId)
+    // Solo permitir una persona por tipo de turno
+    if (personaId && isPersonaDisponible(personaId)) {
+      setAsignacionesMockup(prev => {
+        const newAssignments = { ...prev, [tipoTurno]: personaId }
+        console.log('Nuevas asignaciones:', newAssignments)
+        return newAssignments
+      })
+    }
+  }
+
+  const handleRemoverAsignacion = (tipoTurno) => {
+    console.log('Removiendo asignación de:', tipoTurno)
+    setAsignacionesMockup(prev => {
+      const newAssignments = { ...prev }
+      delete newAssignments[tipoTurno]
+      console.log('Asignaciones después de remover:', newAssignments)
+      return newAssignments
+    })
+  }
+
+  // Obtener personas ya asignadas
+  const getPersonasAsignadas = () => {
+    return new Set(Object.values(asignacionesMockup))
+  }
+
+  // Verificar si una persona está disponible
+  const isPersonaDisponible = (personaId) => {
+    return !getPersonasAsignadas().has(personaId)
+  }
+
+  const inicializarFechas = () => {
+    const hoy = new Date()
+    const inicioSemana = new Date(hoy)
+    inicioSemana.setDate(hoy.getDate() - hoy.getDay() + 1) // Lunes de esta semana
+    
+    const finSemana = new Date(inicioSemana)
+    finSemana.setDate(inicioSemana.getDate() + 6) // Domingo de esta semana
+    
+    setFechaInicio(inicioSemana.toISOString().split('T')[0])
+    setFechaFin(finSemana.toISOString().split('T')[0])
+  }
+
+  const abrirModalProgramacion = () => {
+    inicializarFechas()
+    setAsignacionesMockup({})
+    setShowProgramacionModal(true)
+  }
+
   const scheduleBlocks = convertirTurnosABloques()
 
   // Calcular estadísticas rápidas
@@ -373,6 +481,13 @@ const ProgramacionTurnos = () => {
           <p className="text-gray-600 mt-1">Asigna guardas a turnos mensuales</p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            onClick={abrirModalProgramacion}
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+          >
+            <Zap className="mr-2 h-4 w-4" />
+            Programar Turnos
+          </Button>
           <Button onClick={handleGoToToday} variant="outline">
             Hoy
           </Button>
@@ -702,6 +817,343 @@ const ProgramacionTurnos = () => {
               <Button variant="outline" onClick={() => setShowModal(false)}>
                 Cancelar
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Programación Masiva - MOCKUP EXPLICATIVO */}
+      {showProgramacionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowProgramacionModal(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[95vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-3xl font-bold text-purple-800">⚡ Programador Inteligente de Turnos</h2>
+                <p className="text-gray-600 mt-1">Asigna personas a tipos de turnos para un rango de fechas específico</p>
+              </div>
+              <Button variant="outline" onClick={() => setShowProgramacionModal(false)}>
+                ✕ Cerrar
+              </Button>
+            </div>
+
+            {/* Sección 1: Selección de Fechas */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-blue-600" />
+                  Paso 1: Seleccionar Rango de Fechas
+                </CardTitle>
+                <CardDescription>Define el período que quieres cubrir con turnos programados</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="fechaInicio">Fecha de Inicio</Label>
+                    <Input
+                      id="fechaInicio"
+                      type="date"
+                      value={fechaInicio}
+                      onChange={(e) => setFechaInicio(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="fechaFin">Fecha de Fin</Label>
+                    <Input
+                      id="fechaFin"
+                      type="date"
+                      value={fechaFin}
+                      onChange={(e) => setFechaFin(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+
+                {/* Estadísticas del rango */}
+                {fechaInicio && fechaFin && (() => {
+                  const stats = calcularEstadisticasRango()
+                  return stats && (
+                    <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-blue-50 p-3 rounded-lg text-center">
+                        <div className="text-2xl font-bold text-blue-700">{stats.diasTotales}</div>
+                        <div className="text-xs text-blue-600">Días totales</div>
+                      </div>
+                      <div className="bg-green-50 p-3 rounded-lg text-center">
+                        <div className="text-2xl font-bold text-green-700">{stats.diasSemana}</div>
+                        <div className="text-xs text-green-600">Días de semana</div>
+                      </div>
+                      <div className="bg-orange-50 p-3 rounded-lg text-center">
+                        <div className="text-2xl font-bold text-orange-700">{stats.diasFinSemana}</div>
+                        <div className="text-xs text-orange-600">Fin de semana</div>
+                      </div>
+                      <div className="bg-purple-50 p-3 rounded-lg text-center">
+                        <div className="text-2xl font-bold text-purple-700">{stats.coberturaRequerida}</div>
+                        <div className="text-xs text-purple-600">Turnos requeridos</div>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Sección 2: Asignación de Personas por Tipo de Turno */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-green-600" />
+                  Paso 2: Asignar Personas por Tipo de Turno
+                </CardTitle>
+                <CardDescription>Arrastra y asigna personas a los diferentes tipos de turnos disponibles</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Lista de tipos de turno */}
+                  <div>
+                    <h4 className="font-semibold mb-3">Tipos de Turno Disponibles</h4>
+                    <div className="space-y-3">
+                      {tiposTurno.map(tipo => {
+                        const personaAsignada = asignacionesMockup[tipo]
+                        const persona = personaAsignada ? personasMockup.find(p => p.id === personaAsignada) : null
+                        
+                        return (
+                          <div key={tipo} className="border-2 border-dashed border-gray-300 rounded-lg p-4 min-h-[80px]">
+                            <div className="flex justify-between items-center mb-2">
+                              <Badge variant="outline" className="font-medium">
+                                {tipo}
+                              </Badge>
+                              <div className="text-xs text-gray-500">
+                                {persona ? 'Asignado' : 'Disponible'}
+                              </div>
+                            </div>
+                            
+                            {/* Mostrar persona asignada */}
+                            {persona ? (
+                              <div className="bg-blue-50 border border-blue-200 p-3 rounded flex justify-between items-center">
+                                <div>
+                                  <div className="font-medium text-sm">{persona.nombre}</div>
+                                  <div className="text-xs text-gray-600">{persona.rut}</div>
+                                  <Badge variant="secondary" className="mt-1 text-xs">{persona.tipo}</Badge>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleRemoverAsignacion(tipo)}
+                                  className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  ✕
+                                </Button>
+                              </div>
+                            ) : (
+                              /* Dropdown para asignar persona cuando no hay nadie */
+                              <div className="mt-2">
+                                <select
+                                  className="w-full text-sm p-2 border rounded"
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      const personaId = parseInt(e.target.value)
+                                      console.log('Seleccionando persona:', personaId, 'para turno:', tipo)
+                                      handleAsignarTipoTurno(tipo, personaId)
+                                      e.target.value = ''
+                                    }
+                                  }}
+                                >
+                                  <option value="">+ Asignar persona a {tipo}</option>
+                                  {personasMockup
+                                    .filter(p => isPersonaDisponible(p.id))
+                                    .map(persona => (
+                                      <option key={persona.id} value={persona.id}>
+                                        {persona.nombre} ({persona.tipo})
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Panel de personas disponibles */}
+                  <div>
+                    <h4 className="font-semibold mb-3">Personas Disponibles</h4>
+                    <div className="space-y-2 h-96 overflow-y-auto border rounded-lg p-2">
+                      {personasMockup.map(persona => {
+                        const estaAsignada = !isPersonaDisponible(persona.id)
+                        const turnoAsignado = estaAsignada ? 
+                          Object.entries(asignacionesMockup).find(([, id]) => id === persona.id)?.[0] : null
+                        
+                        return (
+                          <div 
+                            key={persona.id} 
+                            className={`border rounded-lg p-3 transition-all ${
+                              estaAsignada 
+                                ? 'bg-gray-100 border-gray-300 opacity-60' 
+                                : 'bg-white border-gray-200 hover:bg-blue-50'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="font-medium">{persona.nombre}</div>
+                                <div className="text-sm text-gray-600">{persona.rut}</div>
+                                <div className="flex gap-2 mt-1">
+                                  <Badge variant="secondary" className="text-xs">
+                                    {persona.tipo}
+                                  </Badge>
+                                  {estaAsignada && (
+                                    <Badge variant="outline" className="text-xs text-red-600 border-red-300">
+                                      Asignado a {turnoAsignado}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className={`text-lg font-bold ${estaAsignada ? 'text-red-500' : 'text-green-500'}`}>
+                                  {estaAsignada ? '✕' : '✓'}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {estaAsignada ? 'No disponible' : 'Disponible'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Sección 3: Estadísticas y Cobertura */}
+            {fechaInicio && fechaFin && (() => {
+              const stats = calcularEstadisticasRango()
+              return stats && (
+                <Card className="mb-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Activity className="h-5 w-5 text-orange-600" />
+                      Paso 3: Análisis de Cobertura
+                    </CardTitle>
+                    <CardDescription>Estadísticas de la programación actual y áreas faltantes</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {/* Progreso general */}
+                      <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg">
+                        <h5 className="font-semibold text-blue-800 mb-3">📊 Asignación de Turnos</h5>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-sm">Turnos asignados:</span>
+                            <span className="font-bold text-blue-700">{stats.turnosAsignados} de {tiposTurno.length}</span>
+                          </div>
+                          <div className="w-full bg-blue-200 rounded-full h-2">
+                            <div 
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${(stats.turnosAsignados / tiposTurno.length) * 100}%` }}
+                            ></div>
+                          </div>
+                          <div className="text-xs text-blue-600">
+                            {stats.turnosAsignados} asignados • {stats.turnosSinAsignar} pendientes
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Personas involucradas */}
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg">
+                        <h5 className="font-semibold text-green-800 mb-3">👥 Equipo</h5>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm">Personas asignadas:</span>
+                            <Badge className="bg-green-600">{stats.personasAsignadas}</Badge>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm">Total disponibles:</span>
+                            <Badge variant="outline">{personasMockup.length}</Badge>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Faltantes */}
+                      <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg">
+                        <h5 className="font-semibold text-orange-800 mb-3">⚠️ Pendientes</h5>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm">Turnos faltantes:</span>
+                            <Badge className="bg-orange-600">{stats.coberturaPendiente}</Badge>
+                          </div>
+                          <div className="text-xs text-orange-600">
+                            {stats.coberturaPendiente === 0 ? '✅ Cobertura completa' : 
+                             `Necesitas asignar ${stats.coberturaPendiente} turnos más`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Recomendaciones */}
+                    {stats.coberturaPendiente > 0 && (
+                      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <h6 className="font-semibold text-yellow-800 mb-2">💡 Recomendaciones</h6>
+                        <ul className="text-sm text-yellow-700 space-y-1">
+                          <li>• Faltan {stats.coberturaPendiente} asignaciones para completar la cobertura</li>
+                          <li>• Considera asignar más personas a turnos de fin de semana ({stats.diasFinSemana} días)</li>
+                          <li>• Revisa que todas las personas tengan carga de trabajo equilibrada</li>
+                        </ul>
+                      </div>
+                    )}
+
+                    {stats.coberturaPendiente === 0 && stats.turnosAsignados > 0 && (
+                      <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <h6 className="font-semibold text-green-800 mb-2">🎉 ¡Cobertura Completa!</h6>
+                        <p className="text-sm text-green-700">
+                          Has asignado exitosamente todos los turnos necesarios para el período seleccionado. 
+                          La programación está lista para ser implementada.
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })()}
+
+            {/* Botones de acción */}
+            <div className="flex justify-between items-center pt-4 border-t">
+              <div className="text-sm text-gray-600">
+                <MapPin className="inline h-4 w-4 mr-1" />
+                Este es un mockup interactivo. Las asignaciones no se guardan por ahora.
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowProgramacionModal(false)}>
+                  Cancelar
+                </Button>
+                <Button 
+                  className="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700"
+                  onClick={() => {
+                    const asignaciones = Object.entries(asignacionesMockup)
+                    const personas = asignaciones.map(([turno, personaId]) => {
+                      const persona = personasMockup.find(p => p.id === personaId)
+                      return `${turno}: ${persona?.nombre || 'Desconocido'}`
+                    }).join('\n')
+                    
+                    if (asignaciones.length === 0) {
+                      alert('⚠️ No hay asignaciones para aplicar. Asigna al menos una persona a un turno.')
+                      return
+                    }
+                    
+                    const mensaje = `✅ PROGRAMACIÓN APLICADA EXITOSAMENTE\n\nAsignaciones realizadas:\n${personas}\n\nPeríodo: ${fechaInicio || 'No definido'} al ${fechaFin || 'No definido'}\n\n💡 En la versión final, esto se guardaría en la base de datos.`
+                    alert(mensaje)
+                    
+                    // Limpiar el modal
+                    setAsignacionesMockup({})
+                    setFechaInicio('')
+                    setFechaFin('')
+                    setShowProgramacionModal(false)
+                  }}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Aplicar Programación
+                </Button>
+              </div>
             </div>
           </div>
         </div>
