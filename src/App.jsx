@@ -12,6 +12,7 @@ import Registros from './pages/Registros'
 import Reportes from './pages/Reportes'
 import Configuracion from './pages/Configuracion'
 import TestSupabase from './pages/TestSupabase'
+import Roadmap from './pages/Roadmap'
 import { Waves } from 'lucide-react'
 import './App.css'
 
@@ -60,6 +61,7 @@ const AppRoutes = () => {
         <Route path="reportes" element={<Reportes />} />
         <Route path="configuracion" element={<Configuracion />} />
         <Route path="test-supabase" element={<TestSupabase />} />
+        <Route path="roadmap" element={<Roadmap />} />
       </Route>
     </Routes>
   )
