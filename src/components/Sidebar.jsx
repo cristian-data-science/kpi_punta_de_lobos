@@ -9,7 +9,10 @@ import {
   Waves,
   Clock,
   Database,
-  DollarSign
+  DollarSign,
+  CalendarCheck,
+  FileText,
+  Milestone
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -21,6 +24,13 @@ const Sidebar = ({ isOpen, onClose }) => {
       label: 'Dashboard',
       description: 'Panel principal',
       color: 'from-teal-500 to-cyan-500'
+    },
+    { 
+      path: '/roadmap', 
+      icon: Milestone, 
+      label: 'Roadmap',
+      description: 'Estado del proyecto',
+      color: 'from-emerald-500 to-green-500'
     },
     { 
       path: '/personas', 

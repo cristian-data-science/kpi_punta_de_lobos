@@ -668,6 +668,91 @@ export const getTurnosByPersonaId = async (personaId, filters = {}) => {
   return { data, error }
 }
 
+/**
+ * Obtiene la estructura del roadmap desde Supabase.
+ * @param {string} slug Identificador del roadmap (default: 'principal').
+ */
+export const getRoadmapData = async (slug = 'principal') => {
+  const supabase = getSupabaseClient()
+
+  const { data, error } = await supabase
+    .from('roadmap_items')
+    .select('*')
+    .eq('slug', slug)
+    .order('module_position', { ascending: true })
+    .order('task_position', { ascending: true })
+
+  return { data, error }
+}
+
+/**
+ * Guarda la estructura completa del roadmap en tablas normalizadas.
+ * @param {Array} structure Array de hitos/subtareas a persistir.
+ * @param {Object} options Opciones (slug, updatedBy).
+ */
+export const saveRoadmapData = async (structure, { slug = 'principal', updatedBy = null } = {}) => {
+  const supabase = getSupabaseClient()
+  const normalizedStructure = Array.isArray(structure) ? structure : []
+
+  // Limpiar los registros existentes
+  const { error: deleteError } = await supabase
+    .from('roadmap_items')
+    .delete()
+    .eq('slug', slug)
+
+  if (deleteError) {
+    return { data: null, error: deleteError }
+  }
+
+  if (normalizedStructure.length === 0) {
+    return { data: { slug }, error: null }
+  }
+
+  const nowIso = new Date().toISOString()
+
+  const rows = normalizedStructure.flatMap((module, moduleIndex) => {
+    const base = {
+      slug,
+      module_code: module.id,
+      module_title: module.title,
+      module_description: module.description ?? '',
+      module_position: moduleIndex,
+      updated_at: nowIso,
+      updated_by: updatedBy
+    }
+
+    if (!Array.isArray(module.tasks) || module.tasks.length === 0) {
+      return [
+        {
+          ...base,
+          task_code: null,
+          task_title: null,
+          task_status: null,
+          task_position: null
+        }
+      ]
+    }
+
+    return module.tasks.map((task, taskIndex) => ({
+      ...base,
+      task_code: task.id,
+      task_title: task.title,
+      task_status: task.status,
+      task_position: taskIndex
+    }))
+  })
+
+  const { error: insertError } = await supabase
+    .from('roadmap_items')
+    .insert(rows)
+
+  if (insertError) {
+    return { data: null, error: insertError }
+  }
+
+  return { data: { slug }, error: null }
+}
+
 export default {
   checkSupabaseConnection,
   getPersonas,
@@ -693,5 +778,7 @@ export default {
   unsubscribe,
   // Funciones para trabajadores
   getPersonaByRut,
-  getTurnosByPersonaId
+  getTurnosByPersonaId,
+  getRoadmapData,
+  saveRoadmapData
 }
