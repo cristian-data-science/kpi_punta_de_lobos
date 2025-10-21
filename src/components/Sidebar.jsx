@@ -11,7 +11,8 @@ import {
   Database,
   DollarSign,
   CalendarCheck,
-  FileText
+  FileText,
+  Route as RouteIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -66,16 +67,23 @@ const Sidebar = ({ isOpen, onClose }) => {
       description: 'Historial de actividades',
       color: 'from-purple-500 to-pink-500'
     },
-    { 
-      path: '/reportes', 
-      icon: BarChart3, 
+    {
+      path: '/reportes',
+      icon: BarChart3,
       label: 'Reportes',
       description: 'Análisis y estadísticas',
       color: 'from-orange-500 to-red-500'
     },
-    { 
-      path: '/test-supabase', 
-      icon: Database, 
+    {
+      path: '/roadmap',
+      icon: RouteIcon,
+      label: 'Roadmap',
+      description: 'Seguimiento de hitos',
+      color: 'from-cyan-500 to-sky-500'
+    },
+    {
+      path: '/test-supabase',
+      icon: Database,
       label: 'Test Supabase',
       description: 'Prueba de conexión BD',
       color: 'from-green-500 to-emerald-500'
