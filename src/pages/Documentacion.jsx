@@ -14,7 +14,9 @@ import {
   Cloud,
   ChevronRight,
   ChevronDown,
-  Milestone
+  Milestone,
+  Github,
+  ExternalLink
 } from 'lucide-react'
 
 const Documentacion = () => {
@@ -31,14 +33,28 @@ const Documentacion = () => {
         
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl shadow-xl p-8 text-white">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
-              <BookOpen className="h-8 w-8" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
+                <BookOpen className="h-8 w-8" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold">Documentación</h1>
+                <p className="text-blue-100">Sistema KPI Punta de Lobos</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-3xl font-bold">Documentación</h1>
-              <p className="text-blue-100">Sistema KPI Punta de Lobos</p>
-            </div>
+            
+            {/* Enlace al Repositorio */}
+            <a
+              href="https://github.com/cristian-data-science/kpi_punta_de_lobos"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg transition-all duration-200 group border border-white/20"
+            >
+              <Github className="h-5 w-5" />
+              <span className="font-medium hidden sm:inline">Ver Repositorio</span>
+              <ExternalLink className="h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />
+            </a>
           </div>
         </div>
 
@@ -428,8 +444,7 @@ const DocumentacionTecnica = ({ moduloExpandido, toggleModulo }) => {
         tablas: [
           'personas - Información de trabajadores/visitantes (nombre, RUT, email, tipo, tarifa_hora, estado)',
           'turnos - Registro de turnos programados y completados (persona_id FK, fecha, hora_inicio, hora_fin, tipo_turno, ubicacion, estado)',
-          'pagos - Registro de pagos realizados (persona_id FK, turno_id FK, monto, fecha_pago, mes, anio)',
-          'shift_rates - Tarifas configurables del sistema'
+          'pagos - Registro de pagos realizados (persona_id FK, mes, anio, monto_calculado, monto_pagado, estado)'
         ],
         conexion: [
           'Cliente: @supabase/supabase-js',

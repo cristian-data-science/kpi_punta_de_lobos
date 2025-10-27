@@ -381,50 +381,60 @@ const Dashboard = () => {
 
       {/* Sección Informativa Principal */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Próximos Turnos */}
+        {/* Resumen Pagos Semanales */}
         <Card className="shadow-lg lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <CalendarClock className="h-5 w-5 text-teal-600" />
-              Próximos Turnos
+              <DollarSign className="h-5 w-5 text-green-600" />
+              Resumen Pagos Semanales
             </CardTitle>
-            <CardDescription>Turnos programados para hoy y mañana</CardDescription>
+            <CardDescription>Total a pagar esta semana</CardDescription>
           </CardHeader>
           <CardContent>
-            {stats.proximosTurnos.length === 0 ? (
+            {stats.montosAPagar.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                <Calendar className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                <p>No hay turnos próximos programados</p>
+                <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p>No hay turnos esta semana</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {stats.proximosTurnos.map((turno, idx) => {
-                  const badge = getEstadoBadge(turno.estado)
-                  const Icon = badge.icon
-                  return (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                      <div className="flex items-center gap-3 flex-1">
-                        <div className="flex-shrink-0">
-                          <Icon className="h-5 w-5 text-gray-600" />
+              <div className="space-y-4">
+                {/* Total Semanal */}
+                <div className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200">
+                  <div className="text-center">
+                    <p className="text-sm text-green-600 mb-1">Total Semanal</p>
+                    <div className="text-3xl font-bold text-green-800">
+                      ${stats.montoTotalSemanal.toLocaleString('es-CL')}
+                    </div>
+                    <p className="text-xs text-green-600 mt-1">
+                      {stats.montosAPagar.length} {stats.montosAPagar.length === 1 ? 'persona' : 'personas'}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Top 3 montos */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-600 uppercase">Top 3 Montos</p>
+                  {stats.montosAPagar.slice(0, 3).map((persona, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center font-bold text-xs">
+                          {idx + 1}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm text-gray-900 truncate">
-                            {turno.persona?.nombre || 'Sin asignar'}
-                          </p>
+                          <p className="font-semibold text-sm text-gray-900 truncate">{persona.nombre}</p>
                           <p className="text-xs text-gray-600">
-                            {turno.fecha === new Date().toISOString().split('T')[0] ? 'Hoy' : 'Mañana'} · {turno.hora_inicio} - {turno.hora_fin}
+                            {persona.numeroTurnos} turnos · {persona.horasTotales}h
                           </p>
-                          {turno.puesto && (
-                            <p className="text-xs text-gray-500">{turno.puesto}</p>
-                          )}
                         </div>
                       </div>
-                      <Badge className={`${badge.color} border text-xs`}>
-                        {badge.label}
-                      </Badge>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-green-700">
+                          ${persona.monto.toLocaleString('es-CL')}
+                        </p>
+                      </div>
                     </div>
-                  )
-                })}
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
@@ -508,60 +518,50 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Montos a Pagar Resumen */}
+        {/* Próximos Turnos */}
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-green-600" />
-              Resumen Pagos Semanales
+              <CalendarClock className="h-5 w-5 text-teal-600" />
+              Próximos Turnos
             </CardTitle>
-            <CardDescription>Total a pagar esta semana</CardDescription>
+            <CardDescription>Turnos programados para hoy y mañana</CardDescription>
           </CardHeader>
           <CardContent>
-            {stats.montosAPagar.length === 0 ? (
+            {stats.proximosTurnos.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                <p>No hay turnos esta semana</p>
+                <Calendar className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p>No hay turnos próximos programados</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {/* Total Semanal */}
-                <div className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200">
-                  <div className="text-center">
-                    <p className="text-sm text-green-600 mb-1">Total Semanal</p>
-                    <div className="text-3xl font-bold text-green-800">
-                      ${stats.montoTotalSemanal.toLocaleString('es-CL')}
-                    </div>
-                    <p className="text-xs text-green-600 mt-1">
-                      {stats.montosAPagar.length} {stats.montosAPagar.length === 1 ? 'persona' : 'personas'}
-                    </p>
-                  </div>
-                </div>
-                
-                {/* Top 3 montos */}
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-600 uppercase">Top 3 Montos</p>
-                  {stats.montosAPagar.slice(0, 3).map((persona, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-2 flex-1">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center font-bold text-xs">
-                          {idx + 1}
+              <div className="space-y-3">
+                {stats.proximosTurnos.map((turno, idx) => {
+                  const badge = getEstadoBadge(turno.estado)
+                  const Icon = badge.icon
+                  return (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="flex-shrink-0">
+                          <Icon className="h-5 w-5 text-gray-600" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm text-gray-900 truncate">{persona.nombre}</p>
-                          <p className="text-xs text-gray-600">
-                            {persona.numeroTurnos} turnos · {persona.horasTotales}h
+                          <p className="font-semibold text-sm text-gray-900 truncate">
+                            {turno.persona?.nombre || 'Sin asignar'}
                           </p>
+                          <p className="text-xs text-gray-600">
+                            {turno.fecha === new Date().toISOString().split('T')[0] ? 'Hoy' : 'Mañana'} · {turno.hora_inicio} - {turno.hora_fin}
+                          </p>
+                          {turno.puesto && (
+                            <p className="text-xs text-gray-500">{turno.puesto}</p>
+                          )}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-green-700">
-                          ${persona.monto.toLocaleString('es-CL')}
-                        </p>
-                      </div>
+                      <Badge className={`${badge.color} border text-xs`}>
+                        {badge.label}
+                      </Badge>
                     </div>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
             )}
           </CardContent>
