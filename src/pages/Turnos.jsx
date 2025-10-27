@@ -1,12 +1,13 @@
 ﻿import { useState, useEffect, useMemo, useCallback } from 'react'
 import './Turnos.css'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Clock, Calendar, Users, CheckCircle2, AlertCircle, Plus, Edit2, Trash2, RefreshCw, X, CalendarDays, DollarSign, BarChart3, TrendingUp } from 'lucide-react'
+import { Clock, Calendar, Users, CheckCircle2, AlertCircle, Plus, Edit2, Trash2, RefreshCw, X, CalendarDays, DollarSign, BarChart3, TrendingUp, FileDown, ExternalLink, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import ExcelJS from 'exceljs'
 import WeeklySchedule from '@/components/WeeklySchedule/WeeklySchedule'
 import {
   getTurnos,
@@ -367,6 +368,139 @@ const Turnos = () => {
 
   const turnosHoy = turnos.filter(t => t.fecha === new Date().toISOString().split('T')[0])
 
+  // Función para exportar turnos del mes a Excel
+  const exportarTurnosMesExcel = async () => {
+    try {
+      // Obtener mes y año actual
+      const hoy = new Date()
+      const mes = hoy.getMonth() + 1
+      const anio = hoy.getFullYear()
+      const nombreMes = hoy.toLocaleDateString('es-CL', { month: 'long' })
+      
+      // Filtrar turnos del mes actual
+      const turnosMes = turnos.filter(t => {
+        const fechaTurno = new Date(t.fecha + 'T00:00:00')
+        return fechaTurno.getMonth() + 1 === mes && fechaTurno.getFullYear() === anio
+      })
+
+      if (turnosMes.length === 0) {
+        setMessage({ type: 'error', text: 'No hay turnos en el mes actual para exportar' })
+        return
+      }
+
+      // Crear workbook
+      const workbook = new ExcelJS.Workbook()
+      workbook.creator = 'KPI Punta de Lobos'
+      workbook.created = new Date()
+      
+      // Hoja 1: Resumen
+      const sheetResumen = workbook.addWorksheet('Resumen')
+      
+      // Título
+      sheetResumen.mergeCells('A1:F1')
+      const titleCell = sheetResumen.getCell('A1')
+      titleCell.value = `📊 Turnos de ${nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)} ${anio}`
+      titleCell.font = { name: 'Arial Black', size: 16, bold: true, color: { argb: 'FFFFFFFF' } }
+      titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4788' } }
+      titleCell.alignment = { vertical: 'middle', horizontal: 'center' }
+      sheetResumen.getRow(1).height = 30
+
+      // Encabezados
+      sheetResumen.getRow(3).values = ['Fecha', 'Trabajador', 'Hora Inicio', 'Hora Fin', 'Almuerzo', 'Estado']
+      sheetResumen.getRow(3).font = { bold: true, color: { argb: 'FFFFFFFF' } }
+      sheetResumen.getRow(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4788' } }
+      sheetResumen.getRow(3).alignment = { vertical: 'middle', horizontal: 'center' }
+      
+      // Datos
+      turnosMes.forEach((turno, index) => {
+        const persona = personas.find(p => p.id === turno.persona_id)
+        const row = sheetResumen.getRow(4 + index)
+        row.values = [
+          new Date(turno.fecha + 'T00:00:00').toLocaleDateString('es-CL'),
+          persona?.nombre || 'Sin asignar',
+          turno.hora_inicio || '-',
+          turno.hora_fin || '-',
+          turno.hora_almuerzo || '-',
+          turno.estado || 'programado'
+        ]
+        
+        // Estilo alternado
+        if (index % 2 === 0) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F0F0' } }
+        }
+      })
+
+      // Ajustar anchos
+      sheetResumen.getColumn(1).width = 15
+      sheetResumen.getColumn(2).width = 25
+      sheetResumen.getColumn(3).width = 12
+      sheetResumen.getColumn(4).width = 12
+      sheetResumen.getColumn(5).width = 12
+      sheetResumen.getColumn(6).width = 15
+
+      // Hoja 2: Estadísticas
+      const sheetStats = workbook.addWorksheet('Estadísticas')
+      
+      // Título
+      sheetStats.mergeCells('A1:B1')
+      const titleStats = sheetStats.getCell('A1')
+      titleStats.value = '📈 Estadísticas del Mes'
+      titleStats.font = { name: 'Arial Black', size: 14, bold: true, color: { argb: 'FFFFFFFF' } }
+      titleStats.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } }
+      titleStats.alignment = { vertical: 'middle', horizontal: 'center' }
+      sheetStats.getRow(1).height = 25
+
+      // Estadísticas
+      const estadisticas = [
+        ['Total Turnos', turnosMes.length],
+        ['Total Personas', new Set(turnosMes.map(t => t.persona_id)).size],
+        ['Completados', turnosMes.filter(t => t.estado === 'completado').length],
+        ['Programados', turnosMes.filter(t => t.estado === 'programado').length],
+        ['En Curso', turnosMes.filter(t => t.estado === 'en_curso').length],
+        ['Cancelados', turnosMes.filter(t => t.estado === 'cancelado').length]
+      ]
+
+      estadisticas.forEach((stat, index) => {
+        const row = sheetStats.getRow(3 + index)
+        row.values = stat
+        row.getCell(1).font = { bold: true }
+        row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E7FF' } }
+        row.getCell(2).alignment = { horizontal: 'center' }
+      })
+
+      sheetStats.getColumn(1).width = 20
+      sheetStats.getColumn(2).width = 15
+
+      // Descargar
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Turnos_${nombreMes}_${anio}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+
+      setMessage({ type: 'success', text: `✅ Excel exportado: Turnos_${nombreMes}_${anio}.xlsx` })
+    } catch (error) {
+      console.error('Error al exportar Excel:', error)
+      setMessage({ type: 'error', text: `Error al exportar: ${error.message}` })
+    }
+  }
+
+  // Función para copiar link de visualización para trabajadores
+  const copiarLinkTrabajadores = () => {
+    const baseUrl = window.location.origin
+    const link = `${baseUrl}/trabajador/login`
+    
+    navigator.clipboard.writeText(link).then(() => {
+      setMessage({ type: 'success', text: '✅ Link copiado al portapapeles. Los trabajadores pueden acceder en: ' + link })
+    }).catch(err => {
+      console.error('Error al copiar:', err)
+      setMessage({ type: 'error', text: 'Error al copiar el link' })
+    })
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -377,6 +511,14 @@ const Turnos = () => {
         <div className="flex gap-2">
           <Button onClick={handleGoToToday} variant="outline">
             Hoy
+          </Button>
+          <Button onClick={exportarTurnosMesExcel} variant="outline" className="bg-green-50 hover:bg-green-100">
+            <FileDown className="mr-2 h-4 w-4" />
+            Exportar Mes
+          </Button>
+          <Button onClick={copiarLinkTrabajadores} variant="outline" className="bg-blue-50 hover:bg-blue-100">
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Link Trabajadores
           </Button>
           <Button
             onClick={() => setViewMode(viewMode === 'calendar' ? 'list' : 'calendar')}

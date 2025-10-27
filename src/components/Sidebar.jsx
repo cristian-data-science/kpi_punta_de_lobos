@@ -2,7 +2,6 @@ import { NavLink } from 'react-router-dom'
 import { 
   LayoutDashboard, 
   Users, 
-  ClipboardList,
   BarChart3,
   Settings,
   X,
@@ -49,16 +48,9 @@ const Sidebar = ({ isOpen, onClose }) => {
     { 
       path: '/pagos', 
       icon: DollarSign, 
-      label: 'Pagos y Cobros',
+      label: 'Pagos',
       description: 'Gestión financiera',
       color: 'from-green-500 to-emerald-600'
-    },
-    { 
-      path: '/registros', 
-      icon: ClipboardList, 
-      label: 'Registros',
-      description: 'Historial de actividades',
-      color: 'from-purple-500 to-pink-500'
     },
     { 
       path: '/reportes', 

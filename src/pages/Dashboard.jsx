@@ -307,6 +307,17 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
+        <Card className="bg-gradient-to-br from-teal-50 to-emerald-50 border-teal-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-teal-900">Esta Semana</CardTitle>
+            <CalendarClock className="h-5 w-5 text-teal-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-teal-900">{stats.turnosEstaSemana}</div>
+            <p className="text-xs text-teal-700 mt-2">turnos programados</p>
+          </CardContent>
+        </Card>
+
         <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-green-900">Personal Activo</CardTitle>
@@ -333,18 +344,7 @@ const Dashboard = () => {
       </div>
 
       {/* Estadísticas Detalladas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium text-gray-700">Esta Semana</CardTitle>
-            <CalendarClock className="h-4 w-4 text-teal-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-teal-900">{stats.turnosEstaSemana}</div>
-            <p className="text-xs text-gray-500">turnos</p>
-          </CardContent>
-        </Card>
-
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-medium text-gray-700">Este Mes</CardTitle>
@@ -352,7 +352,18 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-900">{stats.turnosMesActual}</div>
-            <p className="text-xs text-gray-500">turnos</p>
+            <p className="text-xs text-gray-500">turnos totales</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-medium text-gray-700">Completados</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-700">{stats.turnosCompletados}</div>
+            <p className="text-xs text-gray-500">este mes</p>
           </CardContent>
         </Card>
 
@@ -368,9 +379,10 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Sección Informativa Principal */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Próximos Turnos */}
-        <Card className="shadow-lg">
+        <Card className="shadow-lg lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CalendarClock className="h-5 w-5 text-teal-600" />
@@ -418,6 +430,41 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Resumen de Estado */}
+        <Card className="bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 shadow-lg border-teal-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-teal-900">
+              <LayoutDashboard className="h-5 w-5" />
+              Estado del Sistema
+            </CardTitle>
+            <CardDescription className="text-teal-700">
+              Operativo Punta de Lobos
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="text-center p-4 bg-white/50 rounded-lg">
+                <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                <p className="font-semibold text-gray-900 text-lg">Sistema Activo</p>
+                <p className="text-xs text-gray-600 mt-1">Operando normalmente</p>
+              </div>
+              <div className="text-center p-4 bg-white/50 rounded-lg">
+                <UserCheck className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+                <p className="font-semibold text-gray-900 text-lg">{stats.personasActivas} Activos</p>
+                <p className="text-xs text-gray-600 mt-1">Personal disponible</p>
+              </div>
+              <div className="text-center p-4 bg-white/50 rounded-lg">
+                <Zap className="h-8 w-8 mx-auto mb-2 text-amber-600" />
+                <p className="font-semibold text-gray-900 text-lg">{stats.turnosEnCurso} En Curso</p>
+                <p className="text-xs text-gray-600 mt-1">Turnos activos ahora</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Personal y Pagos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Personal Más Activo */}
         <Card className="shadow-lg">
           <CardHeader>
@@ -460,92 +507,66 @@ const Dashboard = () => {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      {/* Montos a Pagar por Persona */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-green-600" />
-            Montos a Pagar esta Semana
-          </CardTitle>
-          <CardDescription>Calculado según tarifas por hora y turnos trabajados</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {stats.montosAPagar.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-              <p>No hay turnos esta semana</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {/* Total Semanal */}
-              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                <div className="text-2xl font-bold text-green-800">
-                  ${stats.montoTotalSemanal.toLocaleString('es-CL')}
-                </div>
-                <div className="text-sm text-green-600">Total semanal</div>
+        {/* Montos a Pagar Resumen */}
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-green-600" />
+              Resumen Pagos Semanales
+            </CardTitle>
+            <CardDescription>Total a pagar esta semana</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {stats.montosAPagar.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p>No hay turnos esta semana</p>
               </div>
-              
-              {/* Lista por persona */}
-              {stats.montosAPagar.map((persona, idx) => (
-                <div key={idx} className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-100 hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center font-bold">
-                        {persona.nombre.charAt(0).toUpperCase()}
-                      </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Total Semanal */}
+                <div className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200">
+                  <div className="text-center">
+                    <p className="text-sm text-green-600 mb-1">Total Semanal</p>
+                    <div className="text-3xl font-bold text-green-800">
+                      ${stats.montoTotalSemanal.toLocaleString('es-CL')}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-gray-900">{persona.nombre}</p>
-                      <p className="text-xs text-gray-600">
-                        {persona.numeroTurnos} {persona.numeroTurnos === 1 ? 'turno' : 'turnos'} · {persona.horasTotales} horas
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-green-700">
-                      ${persona.monto.toLocaleString('es-CL')}
+                    <p className="text-xs text-green-600 mt-1">
+                      {stats.montosAPagar.length} {stats.montosAPagar.length === 1 ? 'persona' : 'personas'}
                     </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Resumen de Estado */}
-      <Card className="bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 shadow-lg border-teal-200">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-teal-900">
-            <LayoutDashboard className="h-5 w-5" />
-            Resumen del Sistema
-          </CardTitle>
-          <CardDescription className="text-teal-700">
-            Estado operativo del sistema Punta de Lobos
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center p-4 bg-white/50 rounded-lg">
-              <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-600" />
-              <p className="font-semibold text-gray-900 text-lg">Sistema Activo</p>
-              <p className="text-xs text-gray-600 mt-1">Operando normalmente</p>
-            </div>
-            <div className="text-center p-4 bg-white/50 rounded-lg">
-              <UserCheck className="h-8 w-8 mx-auto mb-2 text-blue-600" />
-              <p className="font-semibold text-gray-900 text-lg">{stats.personasActivas} Activos</p>
-              <p className="text-xs text-gray-600 mt-1">Personal disponible</p>
-            </div>
-            <div className="text-center p-4 bg-white/50 rounded-lg">
-              <Zap className="h-8 w-8 mx-auto mb-2 text-amber-600" />
-              <p className="font-semibold text-gray-900 text-lg">{stats.turnosEnCurso} En Curso</p>
-              <p className="text-xs text-gray-600 mt-1">Turnos activos ahora</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                
+                {/* Top 3 montos */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-600 uppercase">Top 3 Montos</p>
+                  {stats.montosAPagar.slice(0, 3).map((persona, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center font-bold text-xs">
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm text-gray-900 truncate">{persona.nombre}</p>
+                          <p className="text-xs text-gray-600">
+                            {persona.numeroTurnos} turnos · {persona.horasTotales}h
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-green-700">
+                          ${persona.monto.toLocaleString('es-CL')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

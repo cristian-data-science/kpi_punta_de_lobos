@@ -166,8 +166,8 @@ const defaultRoadmap = [
     tasks: [
       {
         id: 'pagos-base',
-        title: 'Seccion de pagos y cobros con resumenes mensuales',
-        status: 'in-progress'
+        title: 'Sistema de pagos a trabajadores con cálculo automático',
+        status: 'completed'
       },
       {
         id: 'flujo-cobros',

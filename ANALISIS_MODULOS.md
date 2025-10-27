@@ -164,20 +164,21 @@
 
 ---
 
-## 🟡 MÓDULOS PARCIALMENTE FUNCIONALES (EN DESARROLLO)
+## � MÓDULOS COMPLETAMENTE FUNCIONALES
 
-### 10. **Pagos y Cobros** 💰
+### 10. **Pagos** 💰
 - **Ruta:** `/pagos`
-- **Estado:** 🟡 ESTRUCTURA BÁSICA - En desarrollo
-- **Descripción:** Módulo de gestión financiera
+- **Estado:** � FUNCIONAL COMPLETO - Issue #5 completado
+- **Descripción:** Sistema de pagos a trabajadores con cálculo automático
 - **Características implementadas:**
-  - ✅ UI diseñada
-  - ✅ Cards de estadísticas
-  - ✅ Estructura de componentes
-- **Características pendientes:**
-  - ⏳ CRUD de transacciones
-  - ⏳ Conexión a BD (cobros table)
-  - ⏳ Cálculos financieros
+  - ✅ Cálculo automático de pagos desde turnos
+  - ✅ Integración completa con Supabase (tabla `pagos`)
+  - ✅ Marcar/desmarcar pagos como pagados
+  - ✅ KPIs en tiempo real (Total Pagado, Pendiente, Personas)
+  - ✅ Filtros por mes/año y búsqueda por nombre
+  - ✅ Triggers automáticos para gestión de estados
+  - ✅ Sistema de sincronización masiva
+  - ✅ Historial de pagos con metadata (método, fecha, referencia)
   - ⏳ Exportación de reportes
 - **Integración BD:** ⚠️ Parcial (tabla existe, no conectada)
 - **Archivos:**
