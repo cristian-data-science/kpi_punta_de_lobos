@@ -243,4 +243,4 @@ Agradecemos profundamente al **equipo de Patagonia Chile** por permitirnos hacer
 
 ---
 
-Desarrollado con ❤️ para Punta de Lobos
+Desarrollado con ❤️ para Parque Punta de Lobos
