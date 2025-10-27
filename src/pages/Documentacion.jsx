@@ -1011,13 +1011,12 @@ import { Button } from '@/components/ui/button'
       ))}
 
       {/* README del Proyecto */}
-      {seccionActiva === 'tecnica' && (
-        <Card className="border-2 border-gray-200 shadow-lg">
-          <CardHeader className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
-            <div className="flex items-center gap-3">
-              <Github className="h-6 w-6" />
-              <div>
-                <CardTitle className="text-xl">README del Proyecto</CardTitle>
+      <Card className="border-2 border-gray-200 shadow-lg mt-6">
+        <CardHeader className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
+          <div className="flex items-center gap-3">
+            <Github className="h-6 w-6" />
+            <div>
+              <CardTitle className="text-xl">README del Proyecto</CardTitle>
                 <CardDescription className="text-purple-100">
                   Documentación completa del repositorio
                 </CardDescription>
@@ -1235,7 +1234,6 @@ pnpm lint         # Ejecutar ESLint`}
             </div>
           </CardContent>
         </Card>
-      )}
     </div>
   )
 }
