@@ -1010,64 +1010,90 @@ import { Button } from '@/components/ui/button'
         </Card>
       ))}
 
-      {/* README del Proyecto */}
-      <Card className="border-2 border-gray-200 shadow-lg mt-6">
-        <CardHeader className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
-          <div className="flex items-center gap-3">
-            <Github className="h-6 w-6" />
-            <div>
-              <CardTitle className="text-xl">README del Proyecto</CardTitle>
-                <CardDescription className="text-purple-100">
-                  Documentación completa del repositorio
-                </CardDescription>
+      {/* README del Proyecto - Desplegable */}
+      <Card 
+        className={`border-2 transition-all duration-300 cursor-pointer hover:shadow-xl mt-6 ${
+          moduloExpandido === 'readme' 
+            ? 'shadow-xl bg-gradient-to-br from-purple-500 to-indigo-600' 
+            : 'border-gray-200 shadow-lg hover:border-purple-300'
+        }`}
+        onClick={() => toggleModulo('readme')}
+      >
+        <CardHeader className={`${moduloExpandido !== 'readme' ? 'p-0' : ''}`}>
+          <div className={`flex items-center justify-between ${moduloExpandido !== 'readme' ? 'p-6 m-0' : ''}`}>
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${
+                moduloExpandido === 'readme'
+                  ? 'bg-white/20'
+                  : 'bg-gradient-to-br from-purple-500 to-indigo-600'
+              }`}>
+                <Github className={`h-6 w-6 ${moduloExpandido === 'readme' ? 'text-white' : 'text-white'}`} />
+              </div>
+              <div>
+                <CardTitle className={`text-base mb-2 ${
+                  moduloExpandido === 'readme' ? 'text-white' : 'text-gray-900'
+                }`}>
+                  README del Proyecto
+                </CardTitle>
+                {moduloExpandido !== 'readme' && (
+                  <p className="text-sm text-gray-600">Documentación completa del repositorio</p>
+                )}
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="p-6 space-y-6">
+            {moduloExpandido === 'readme' ? (
+              <ChevronDown className="h-5 w-5 text-white" />
+            ) : (
+              <ChevronRight className="h-5 w-5 text-gray-400" />
+            )}
+          </div>
+        </CardHeader>
+
+        {moduloExpandido === 'readme' && (
+          <CardContent className="bg-white rounded-b-lg p-6 space-y-4">
             {/* Header */}
-            <div className="border-b border-gray-200 pb-4">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+            <div className="border-b border-gray-200 pb-3 mb-3">
+              <h1 className="text-base font-bold text-gray-900 mb-2 flex items-center gap-2">
                 🌊 Punta de Lobos - Sistema de Gestión de Personas
               </h1>
-              <p className="text-gray-600">
+              <p className="text-sm text-gray-600">
                 Sistema moderno y completo de gestión de personas para Punta de Lobos, construido con React, Vite y Supabase.
               </p>
             </div>
 
             {/* Características */}
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">✨ Características</h2>
+              <h3 className="font-semibold text-base mb-2">✨ Características</h3>
               <ul className="space-y-2">
-                <li className="flex items-start gap-2 text-gray-700">
-                  <span className="text-teal-600 font-bold">🔐</span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   Sistema de autenticación seguro con control de intentos
                 </li>
-                <li className="flex items-start gap-2 text-gray-700">
-                  <span className="text-teal-600 font-bold">📊</span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   Dashboard con métricas y estadísticas en tiempo real
                 </li>
-                <li className="flex items-start gap-2 text-gray-700">
-                  <span className="text-teal-600 font-bold">👥</span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   Gestión de personas
                 </li>
-                <li className="flex items-start gap-2 text-gray-700">
-                  <span className="text-teal-600 font-bold">📅</span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   Calendario de turnos
                 </li>
-                <li className="flex items-start gap-2 text-gray-700">
-                  <span className="text-teal-600 font-bold">💰</span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   Sistema de tarifas por persona
                 </li>
-                <li className="flex items-start gap-2 text-gray-700">
-                  <span className="text-teal-600 font-bold">📈</span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   Reportes y análisis de datos
                 </li>
-                <li className="flex items-start gap-2 text-gray-700">
-                  <span className="text-teal-600 font-bold">🎨</span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   UI moderna con TailwindCSS y shadcn/ui
                 </li>
-                <li className="flex items-start gap-2 text-gray-700">
-                  <span className="text-teal-600 font-bold">🗄️</span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   Base de datos PostgreSQL en Supabase
                 </li>
               </ul>
@@ -1075,57 +1101,66 @@ import { Button } from '@/components/ui/button'
 
             {/* Stack Tecnológico */}
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">🛠️ Stack Tecnológico</h2>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <h3 className="font-bold text-blue-900 mb-2">Frontend</h3>
-                  <ul className="space-y-1 text-sm text-blue-800">
-                    <li>• React 19.1.0 - Framework principal</li>
-                    <li>• Vite 6.3.5 - Build tool y dev server</li>
-                    <li>• React Router DOM 7.6.1 - Navegación</li>
-                  </ul>
-                </div>
-                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                  <h3 className="font-bold text-purple-900 mb-2">Styling & UI</h3>
-                  <ul className="space-y-1 text-sm text-purple-800">
-                    <li>• Tailwind CSS 4.1.7 - Framework de estilos</li>
-                    <li>• Radix UI - Componentes accesibles</li>
-                    <li>• shadcn/ui - Sistema de componentes</li>
-                    <li>• Lucide React - Iconografía</li>
-                  </ul>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                  <h3 className="font-bold text-green-900 mb-2">Visualización</h3>
-                  <ul className="space-y-1 text-sm text-green-800">
-                    <li>• ECharts 5.6.0 - Gráficos avanzados</li>
-                    <li>• Recharts 2.15.3 - Gráficos React</li>
-                    <li>• ExcelJS - Exportación a Excel</li>
-                  </ul>
-                </div>
-                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-                  <h3 className="font-bold text-orange-900 mb-2">Backend & Base de Datos</h3>
-                  <ul className="space-y-1 text-sm text-orange-800">
-                    <li>• Supabase - PostgreSQL + Auth</li>
-                    <li>• @supabase/supabase-js 2.57.2</li>
-                  </ul>
-                </div>
+              <h3 className="font-semibold text-base mb-2">🛠️ Stack Tecnológico</h3>
+              <div className="space-y-2 text-sm text-gray-600 mb-3">
+                <p className="font-medium">Frontend:</p>
+                <ul className="space-y-2 ml-4">
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full mt-1.5"></div>
+                    React 19.1.0 - Framework principal
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full mt-1.5"></div>
+                    Vite 6.3.5 - Build tool y dev server
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full mt-1.5"></div>
+                    React Router DOM 7.6.1 - Navegación
+                  </li>
+                </ul>
+                <p className="font-medium mt-3">Styling & UI:</p>
+                <ul className="space-y-2 ml-4">
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-purple-600 rounded-full mt-1.5"></div>
+                    Tailwind CSS 4.1.7 - Framework de estilos
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-purple-600 rounded-full mt-1.5"></div>
+                    Radix UI - Componentes accesibles
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-purple-600 rounded-full mt-1.5"></div>
+                    shadcn/ui - Sistema de componentes
+                  </li>
+                </ul>
+                <p className="font-medium mt-3">Backend & Base de Datos:</p>
+                <ul className="space-y-2 ml-4">
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-orange-600 rounded-full mt-1.5"></div>
+                    Supabase - PostgreSQL + Auth
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-orange-600 rounded-full mt-1.5"></div>
+                    @supabase/supabase-js 2.57.2
+                  </li>
+                </ul>
               </div>
             </div>
 
             {/* Requisitos */}
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">📋 Requisitos Previos</h2>
+              <h3 className="font-semibold text-base mb-2">📋 Requisitos Previos</h3>
               <ul className="space-y-2">
-                <li className="flex items-center gap-2 text-gray-700">
-                  <span className="w-2 h-2 bg-teal-600 rounded-full"></span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   Node.js &gt;= 18.0.0
                 </li>
-                <li className="flex items-center gap-2 text-gray-700">
-                  <span className="w-2 h-2 bg-teal-600 rounded-full"></span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   pnpm &gt;= 9.0.0
                 </li>
-                <li className="flex items-center gap-2 text-gray-700">
-                  <span className="w-2 h-2 bg-teal-600 rounded-full"></span>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
                   Cuenta en Supabase (gratuita)
                 </li>
               </ul>
@@ -1133,107 +1168,89 @@ import { Button } from '@/components/ui/button'
 
             {/* Instalación */}
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">🚀 Instalación</h2>
-              <div className="space-y-4">
+              <h3 className="font-semibold text-base mb-2">🚀 Instalación</h3>
+              <div className="space-y-3">
                 <div>
-                  <h3 className="font-semibold text-gray-800 mb-2">1. Clonar el repositorio</h3>
+                  <p className="text-sm text-gray-600 mb-2">1. Clonar el repositorio</p>
                   <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-sm">
 {`git clone https://github.com/cristian-data-science/kpi_punta_de_lobos.git
 cd kpi`}
                   </pre>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-800 mb-2">2. Instalar dependencias</h3>
+                  <p className="text-sm text-gray-600 mb-2">2. Instalar dependencias</p>
                   <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-sm">
 {`pnpm install`}
                   </pre>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-800 mb-2">3. Configurar variables de entorno</h3>
+                  <p className="text-sm text-gray-600 mb-2">3. Configurar variables de entorno</p>
                   <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-sm">
 {`cp .env.example .env.local`}
                   </pre>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Edita .env.local con tus credenciales de Supabase
-                  </p>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-800 mb-2">4. Iniciar servidor de desarrollo</h3>
+                  <p className="text-sm text-gray-600 mb-2">4. Iniciar servidor de desarrollo</p>
                   <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-sm">
 {`pnpm dev`}
                   </pre>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Abre http://localhost:5173 en tu navegador
-                  </p>
                 </div>
               </div>
-            </div>
-
-            {/* Estructura del Proyecto */}
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">📁 Estructura del Proyecto</h2>
-              <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
-{`kpi/
-├── src/
-│   ├── components/          # Componentes reutilizables
-│   ├── contexts/            # Contextos de React
-│   ├── pages/              # Páginas de la aplicación
-│   ├── services/           # Servicios y API
-│   ├── config/             # Configuraciones
-│   ├── hooks/              # Custom hooks
-│   └── utils/              # Funciones auxiliares
-├── config/                 # Archivos de configuración
-├── docs/                   # Documentación
-├── scripts/                # Scripts de utilidades
-├── sql/                    # Scripts SQL
-└── public/                 # Assets estáticos`}
-              </pre>
             </div>
 
             {/* Scripts Disponibles */}
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">📝 Scripts Disponibles</h2>
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-300">
-                <pre className="text-sm text-gray-800 space-y-1">
+              <h3 className="font-semibold text-base mb-2">� Scripts Disponibles</h3>
+              <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-sm">
 {`pnpm dev          # Servidor de desarrollo
 pnpm build        # Build para producción
 pnpm preview      # Vista previa del build
 pnpm lint         # Ejecutar ESLint`}
-                </pre>
-              </div>
+              </pre>
             </div>
 
             {/* Seguridad */}
-            <div className="bg-red-50 border-l-4 border-red-600 p-4 rounded-r-lg">
-              <h2 className="text-xl font-bold text-red-900 mb-2 flex items-center gap-2">
-                🔒 Seguridad
-              </h2>
-              <p className="text-sm text-red-800 mb-3">
-                Este proyecto sigue las mejores prácticas de seguridad:
-              </p>
-              <ul className="space-y-1 text-sm text-red-800">
-                <li>✅ Credenciales SIEMPRE en variables de entorno</li>
-                <li>✅ .env.local excluido del repositorio</li>
-                <li>✅ Sin contraseñas hardcodeadas en el código</li>
-                <li>✅ Control de intentos de login</li>
-                <li>✅ Row Level Security (RLS) habilitado en Supabase</li>
+            <div className="bg-red-50 border-l-4 border-red-600 p-3 rounded-r-lg">
+              <h3 className="font-semibold text-base text-red-900 mb-2">🔒 Seguridad</h3>
+              <ul className="space-y-2">
+                <li className="flex items-start gap-2 text-sm text-red-800">
+                  <div className="w-2 h-2 bg-red-600 rounded-full mt-1.5"></div>
+                  Credenciales SIEMPRE en variables de entorno
+                </li>
+                <li className="flex items-start gap-2 text-sm text-red-800">
+                  <div className="w-2 h-2 bg-red-600 rounded-full mt-1.5"></div>
+                  .env.local excluido del repositorio
+                </li>
+                <li className="flex items-start gap-2 text-sm text-red-800">
+                  <div className="w-2 h-2 bg-red-600 rounded-full mt-1.5"></div>
+                  Sin contraseñas hardcodeadas en el código
+                </li>
+                <li className="flex items-start gap-2 text-sm text-red-800">
+                  <div className="w-2 h-2 bg-red-600 rounded-full mt-1.5"></div>
+                  Control de intentos de login
+                </li>
+                <li className="flex items-start gap-2 text-sm text-red-800">
+                  <div className="w-2 h-2 bg-red-600 rounded-full mt-1.5"></div>
+                  Row Level Security (RLS) habilitado en Supabase
+                </li>
               </ul>
             </div>
 
             {/* Agradecimientos */}
-            <div className="border-t border-gray-200 pt-4">
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">🙏 Agradecimientos</h2>
-              <p className="text-gray-700 leading-relaxed">
+            <div className="border-t border-gray-200 pt-3">
+              <h3 className="font-semibold text-base mb-2">🙏 Agradecimientos</h3>
+              <p className="text-sm text-gray-600 leading-relaxed mb-3">
                 Agradecemos profundamente al <span className="font-semibold text-teal-700">equipo de Patagonia Chile</span> por 
                 permitirnos hacer esta contribución a la fundación Parque Punta de Lobos, apoyando la gestión sostenible y 
                 el cuidado de este invaluable patrimonio natural.
               </p>
-              <div className="mt-4 text-center">
-                <p className="text-gray-600 italic">Desarrollado con ❤️ para Punta de Lobos</p>
-              </div>
+              <p className="text-sm text-gray-600 italic text-center">
+                Desarrollado con ❤️ para Punta de Lobos
+              </p>
             </div>
           </CardContent>
-        </Card>
+        )}
+      </Card>
     </div>
   )
 }
