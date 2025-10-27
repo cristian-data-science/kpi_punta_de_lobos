@@ -11,7 +11,8 @@ import {
   DollarSign,
   CalendarCheck,
   FileText,
-  Milestone
+  Milestone,
+  BookOpen
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -58,6 +59,13 @@ const Sidebar = ({ isOpen, onClose }) => {
       label: 'Reportes',
       description: 'Análisis y estadísticas',
       color: 'from-orange-500 to-red-500'
+    },
+    { 
+      path: '/documentacion', 
+      icon: BookOpen, 
+      label: 'Documentación',
+      description: 'Guías y recursos',
+      color: 'from-blue-500 to-purple-500'
     },
     { 
       path: '/configuracion', 

@@ -11,6 +11,7 @@ import Personas from './pages/Personas'
 import Turnos from './pages/Turnos'
 import Pagos from './pages/Pagos'
 import Reportes from './pages/Reportes'
+import Documentacion from './pages/Documentacion'
 import Configuracion from './pages/Configuracion'
 import TestSupabase from './pages/TestSupabase'
 import { Waves } from 'lucide-react'
@@ -57,6 +58,7 @@ const AppRoutes = () => {
         <Route path="turnos" element={<Turnos />} />
         <Route path="pagos" element={<Pagos />} />
         <Route path="reportes" element={<Reportes />} />
+        <Route path="documentacion" element={<Documentacion />} />
         <Route path="configuracion" element={<Configuracion />} />
         <Route path="test-supabase" element={<TestSupabase />} />
       </Route>
