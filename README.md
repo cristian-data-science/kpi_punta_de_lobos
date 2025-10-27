@@ -234,6 +234,10 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 
 ## 🙏 Agradecimientos
 
+Agradecemos profundamente al **equipo de Patagonia Chile** por permitirnos hacer esta contribución a la fundación Parque Punta de Lobos, apoyando la gestión sostenible y el cuidado de este invaluable patrimonio natural.
+
+### Tecnologías
+
 - [React](https://react.dev)
 - [Vite](https://vitejs.dev)
 - [Supabase](https://supabase.com)
