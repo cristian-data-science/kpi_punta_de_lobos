@@ -10,6 +10,8 @@ import Personas from './pages/Personas'
 import Turnos from './pages/Turnos'
 import Pagos from './pages/Pagos'
 import Reportes from './pages/Reportes'
+import Reportes_v2 from './pages/Reportes_v2'
+import Reportes_v3 from './pages/Reportes_v3'
 import Documentacion from './pages/Documentacion'
 import Configuracion from './pages/Configuracion'
 import TestSupabase from './pages/TestSupabase'
@@ -56,6 +58,8 @@ const AppRoutes = () => {
         <Route path="turnos" element={<Turnos />} />
         <Route path="pagos" element={<Pagos />} />
         <Route path="reportes" element={<Reportes />} />
+        <Route path="reportes-v2" element={<Reportes_v2 />} />
+        <Route path="reportes-v3" element={<Reportes_v3 />} />
         <Route path="documentacion" element={<Documentacion />} />
         <Route path="configuracion" element={<Configuracion />} />
         <Route path="test-supabase" element={<TestSupabase />} />
