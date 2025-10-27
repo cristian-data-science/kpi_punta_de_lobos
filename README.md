@@ -6,13 +6,10 @@ Sistema moderno y completo de gestión de personas para Punta de Lobos, construi
 
 - 🔐 Sistema de autenticación seguro con control de intentos
 - 📊 Dashboard con métricas y estadísticas en tiempo real
-- 👥 Gestión completa de personas (visitantes, guías, staff, instructores)
-- 📝 Registro cronológico de actividades y eventos
-- 📅 Calendario de turnos con múltiples vistas (semana, mes, año)
+- 👥 Gestión de personas
+- 📅 Calendario de turnos
 - 💰 Sistema de tarifas por persona
 - 📈 Reportes y análisis de datos
-- ⚙️ Panel de configuración del sistema
-- 📱 Diseño responsive (móvil, tablet, desktop)
 - 🎨 UI moderna con TailwindCSS y shadcn/ui
 - 🗄️ Base de datos PostgreSQL en Supabase
 
