@@ -169,8 +169,6 @@ const DocumentacionUsuarios = ({ moduloExpandido, toggleModulo }) => {
           'Programar nuevos turnos asignando persona, fecha y horario',
           'Definir ubicación del turno (Playa, Estacionamiento, etc.)',
           'Asignar tipo de turno según la función',
-          'Marcar turnos como completados, cancelados o ausentes',
-          'Ver estado de cada turno con colores (verde=completado, amarillo=programado)',
           'Exportar turnos del mes a Excel',
           'Compartir link para que trabajadores vean sus turnos',
           'Agregar observaciones a cada turno'
@@ -179,7 +177,6 @@ const DocumentacionUsuarios = ({ moduloExpandido, toggleModulo }) => {
           'Para crear un turno: Haz clic en "Nuevo Turno"',
           'Selecciona la fecha, persona, horario y ubicación',
           'Guarda el turno y aparecerá en el calendario',
-          'Para cambiar estado: Haz clic en el turno y selecciona el nuevo estado',
           'Para exportar: Haz clic en "Exportar Mes" (crea archivo Excel)',
           'Para compartir link: Haz clic en "Link Trabajadores" (se copia automáticamente)'
         ]
