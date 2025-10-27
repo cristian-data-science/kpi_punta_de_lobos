@@ -5,8 +5,6 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Personas from './pages/Personas'
 import Turnos from './pages/Turnos'
-import ReporteTurnos from './pages/ReporteTurnos'
-import ProgramacionTurnos from './pages/ProgramacionTurnos'
 import Pagos from './pages/Pagos'
 import Registros from './pages/Registros'
 import Reportes from './pages/Reportes'
@@ -53,8 +51,6 @@ const AppRoutes = () => {
         <Route index element={<Dashboard />} />
         <Route path="personas" element={<Personas />} />
         <Route path="turnos" element={<Turnos />} />
-        <Route path="reporte-turnos" element={<ReporteTurnos />} />
-        <Route path="programacion-turnos" element={<ProgramacionTurnos />} />
         <Route path="pagos" element={<Pagos />} />
         <Route path="registros" element={<Registros />} />
         <Route path="reportes" element={<Reportes />} />

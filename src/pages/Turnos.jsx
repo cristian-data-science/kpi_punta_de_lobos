@@ -1,7 +1,7 @@
-﻿import { useState, useEffect } from 'react'
+﻿import { useState, useEffect, useMemo, useCallback } from 'react'
 import './Turnos.css'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Clock, Calendar, Users, CheckCircle2, AlertCircle, Plus, Edit2, Trash2, RefreshCw, X, CalendarDays } from 'lucide-react'
+import { Clock, Calendar, Users, CheckCircle2, AlertCircle, Plus, Edit2, Trash2, RefreshCw, X, CalendarDays, DollarSign, BarChart3, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,7 +20,8 @@ import {
   getWeekEnd,
   turnosToBlocks,
   goToNextWeek,
-  goToPreviousWeek
+  goToPreviousWeek,
+  formatWeekRange
 } from '@/utils/scheduleHelpers'
 
 const Turnos = () => {
@@ -33,6 +34,7 @@ const Turnos = () => {
   const [viewMode, setViewMode] = useState('calendar')
   const [quickCreateMode, setQuickCreateMode] = useState(false)
   const [currentWeekStart, setCurrentWeekStart] = useState(getWeekStart(new Date()))
+  const [showReportes, setShowReportes] = useState(false)
   const [stats, setStats] = useState({
     turnosHoy: 0,
     enCurso: 0,
@@ -52,11 +54,7 @@ const Turnos = () => {
     notas: ''
   })
 
-  useEffect(() => {
-    loadData()
-  }, [currentWeekStart])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       // Obtener turnos de la semana actual
@@ -83,7 +81,11 @@ const Turnos = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentWeekStart])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const calculateStats = (turnosData) => {
     const hoy = new Date().toISOString().split('T')[0]
@@ -95,6 +97,86 @@ const Turnos = () => {
     }
     setStats(newStats)
   }
+
+  // Calcular estadísticas del reporte para la semana actual
+  const reporteStats = useMemo(() => {
+    if (!turnos.length || !personas.length) return null
+
+    // 1. Turnos por persona
+    const turnosPorPersona = {}
+    turnos.forEach(turno => {
+      const persona = personas.find(p => p.id === turno.persona_id)
+      const nombre = persona?.nombre || 'Sin asignar'
+      turnosPorPersona[nombre] = (turnosPorPersona[nombre] || 0) + 1
+    })
+
+    // 2. Turnos día de semana vs fin de semana por persona
+    const turnosPorPersonaDetalle = {}
+    turnos.forEach(turno => {
+      const persona = personas.find(p => p.id === turno.persona_id)
+      const nombre = persona?.nombre || 'Sin asignar'
+      
+      if (!turnosPorPersonaDetalle[nombre]) {
+        turnosPorPersonaDetalle[nombre] = { semana: 0, finSemana: 0 }
+      }
+
+      const fecha = new Date(turno.fecha + 'T00:00:00')
+      const diaSemana = fecha.getDay() // 0=Domingo, 6=Sábado
+      
+      if (diaSemana === 0 || diaSemana === 6) {
+        turnosPorPersonaDetalle[nombre].finSemana++
+      } else {
+        turnosPorPersonaDetalle[nombre].semana++
+      }
+    })
+
+    // 3. Monto a pagar (usando tarifa por persona o estándar)
+    let montoTotal = 0
+    const pagosPorPersona = {}
+    
+    turnos.forEach(turno => {
+      const persona = personas.find(p => p.id === turno.persona_id)
+      const nombre = persona?.nombre || 'Sin asignar'
+      
+      // Obtener tarifa por persona si existe, sino usar estándar
+      const tarifaPorHora = persona?.tarifa_hora || 8000 // Tarifa estándar
+      const horaInicio = turno.hora_inicio ? parseInt(turno.hora_inicio.split(':')[0]) : 9
+      const horaFin = turno.hora_fin ? parseInt(turno.hora_fin.split(':')[0]) : 17
+      const horasTrabajadas = horaFin - horaInicio
+      
+      const montoTurno = horasTrabajadas * tarifaPorHora
+      montoTotal += montoTurno
+      
+      if (!pagosPorPersona[nombre]) {
+        pagosPorPersona[nombre] = 0
+      }
+      pagosPorPersona[nombre] += montoTurno
+    })
+
+    // 4. Horas con mayor cobertura (más turnos)
+    const coberturaPorHora = {}
+    turnos.forEach(turno => {
+      const horaInicio = turno.hora_inicio ? parseInt(turno.hora_inicio.split(':')[0]) : 9
+      const horaFin = turno.hora_fin ? parseInt(turno.hora_fin.split(':')[0]) : 17
+      
+      for (let hora = horaInicio; hora < horaFin; hora++) {
+        coberturaPorHora[hora] = (coberturaPorHora[hora] || 0) + 1
+      }
+    })
+
+    // Encontrar las 3 horas con mayor cobertura
+    const horasOrdenadas = Object.entries(coberturaPorHora)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 3)
+
+    return {
+      turnosPorPersona,
+      turnosPorPersonaDetalle,
+      pagosPorPersona,
+      montoTotal,
+      horasConMayorCobertura: horasOrdenadas
+    }
+  }, [turnos, personas])
 
   // Convertir turnos a bloques para el calendario semanal
   const scheduleBlocks = turnosToBlocks(turnos, currentWeekStart)
@@ -290,7 +372,7 @@ const Turnos = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">⏰ Gestión de Turnos</h1>
-          <p className="text-gray-600 mt-1">Visualiza y gestiona turnos del equipo</p>
+          <p className="text-gray-600 mt-1">Visualiza y gestiona turnos del equipo - {formatWeekRange(currentWeekStart)}</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={handleGoToToday} variant="outline">
@@ -302,6 +384,14 @@ const Turnos = () => {
           >
             {viewMode === 'calendar' ? <Users className="mr-2 h-4 w-4" /> : <CalendarDays className="mr-2 h-4 w-4" />}
             {viewMode === 'calendar' ? 'Ver Lista' : 'Ver Calendario'}
+          </Button>
+          <Button
+            onClick={() => setShowReportes(!showReportes)}
+            variant="outline"
+            className={showReportes ? 'bg-purple-50' : ''}
+          >
+            <BarChart3 className="mr-2 h-4 w-4" />
+            {showReportes ? 'Ocultar Reportes' : 'Ver Reportes'}
           </Button>
           <Button onClick={() => {
             setQuickCreateMode(false)
@@ -465,6 +555,126 @@ const Turnos = () => {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Estadísticas del Reporte - Sección Colapsable */}
+      {showReportes && reporteStats && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Turnos por Persona */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-blue-600" />
+                Turnos por Persona
+              </CardTitle>
+              <CardDescription>Distribución de turnos en la semana actual</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {Object.entries(reporteStats.turnosPorPersona)
+                  .sort(([,a], [,b]) => b - a)
+                  .map(([persona, cantidad]) => (
+                    <div key={persona} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium">{persona}</span>
+                      <Badge variant="secondary">{cantidad} turnos</Badge>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Turnos Semana vs Fin de Semana */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-green-600" />
+                Semana vs Fin de Semana
+              </CardTitle>
+              <CardDescription>Distribución por tipo de día</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {Object.entries(reporteStats.turnosPorPersonaDetalle).map(([persona, detalle]) => (
+                  <div key={persona} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="font-medium mb-2">{persona}</div>
+                    <div className="flex gap-4 text-sm">
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                        <span>Semana: {detalle.semana}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                        <span>Fin de semana: {detalle.finSemana}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Monto a Pagar */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-green-600" />
+                Monto a Pagar
+              </CardTitle>
+              <CardDescription>Cálculo basado en tarifas por persona</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="text-2xl font-bold text-green-800">
+                    ${reporteStats.montoTotal.toLocaleString('es-CL')}
+                  </div>
+                  <div className="text-sm text-green-600">Total semanal</div>
+                </div>
+                {Object.entries(reporteStats.pagosPorPersona)
+                  .sort(([,a], [,b]) => b - a)
+                  .map(([persona, monto]) => (
+                    <div key={persona} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium">{persona}</span>
+                      <span className="text-green-600 font-semibold">
+                        ${monto.toLocaleString('es-CL')}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Horas con Mayor Cobertura */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-purple-600" />
+                Horas con Mayor Cobertura
+              </CardTitle>
+              <CardDescription>Top 3 horas con más personas trabajando</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {reporteStats.horasConMayorCobertura.map(([hora, cantidad], index) => (
+                  <div key={hora} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${
+                        index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : 'bg-orange-400'
+                      }`}>
+                        {index + 1}
+                      </div>
+                      <span className="font-medium">{hora}:00 - {parseInt(hora) + 1}:00</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-purple-600" />
+                      <span className="font-semibold">{cantidad} personas</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {showModal && (
