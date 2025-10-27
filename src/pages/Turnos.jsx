@@ -34,7 +34,7 @@ const Turnos = () => {
   const [viewMode, setViewMode] = useState('calendar')
   const [quickCreateMode, setQuickCreateMode] = useState(false)
   const [currentWeekStart, setCurrentWeekStart] = useState(getWeekStart(new Date()))
-  const [showReportes, setShowReportes] = useState(false)
+  const [showReportes, setShowReportes] = useState(true)
   const [stats, setStats] = useState({
     turnosHoy: 0,
     enCurso: 0,
