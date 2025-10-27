@@ -6,7 +6,6 @@ import Login from './pages/Login'
 import LoginTrabajador from './pages/LoginTrabajador'
 import TurnosViewer from './pages/TurnosViewer'
 import Dashboard from './pages/Dashboard'
-import Roadmap from './pages/Roadmap'
 import Personas from './pages/Personas'
 import Turnos from './pages/Turnos'
 import Pagos from './pages/Pagos'
@@ -53,7 +52,6 @@ const AppRoutes = () => {
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<Dashboard />} />
-        <Route path="roadmap" element={<Roadmap />} />
         <Route path="personas" element={<Personas />} />
         <Route path="turnos" element={<Turnos />} />
         <Route path="pagos" element={<Pagos />} />

@@ -14,7 +14,6 @@ import {
   Cloud,
   ChevronRight,
   ChevronDown,
-  Milestone,
   Github,
   ExternalLink
 } from 'lucide-react'
@@ -52,7 +51,7 @@ const Documentacion = () => {
               className="flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg transition-all duration-200 group border border-white/20"
             >
               <Github className="h-5 w-5" />
-              <span className="font-medium hidden sm:inline">Ver Repositorio</span>
+              <span className="font-medium hidden sm:inline">Ver Código del Proyecto</span>
               <ExternalLink className="h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />
             </a>
           </div>
@@ -126,27 +125,6 @@ const DocumentacionUsuarios = ({ moduloExpandido, toggleModulo }) => {
           'Puedes ver tarjetas con números grandes que resumen la información',
           'Desplázate hacia abajo para ver más detalles y gráficos',
           'Los números se actualizan automáticamente cuando hay cambios'
-        ]
-      }
-    },
-    {
-      id: 'roadmap',
-      icon: Milestone,
-      titulo: 'Roadmap',
-      descripcion: 'Estado y planificación del proyecto',
-      color: 'from-emerald-500 to-green-500',
-      contenido: {
-        queEs: 'El Roadmap muestra el estado actual del proyecto, qué funcionalidades están implementadas y cuáles están en desarrollo.',
-        queHace: [
-          'Muestra el progreso general del proyecto con porcentajes',
-          'Lista todas las funcionalidades del sistema organizadas por categoría',
-          'Indica qué está completado, en progreso o pendiente',
-          'Muestra el estado de cada módulo (Personas, Turnos, Pagos, etc.)'
-        ],
-        comoUsar: [
-          'Accede desde el menú lateral',
-          'Revisa el estado de cada funcionalidad',
-          'Consulta qué mejoras están planificadas'
         ]
       }
     },
