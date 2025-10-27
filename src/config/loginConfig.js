@@ -15,7 +15,9 @@ export const LOGIN_CONFIG = {
 }
 
 // 🔐 Configuración de credenciales desde variables de entorno
+// IMPORTANTE: Las credenciales DEBEN estar en .env.local
+// NO se proporcionan valores por defecto por seguridad
 export const VALID_CREDENTIALS = {
-  username: import.meta.env.VITE_ADMIN_USERNAME || 'admin',
-  password: import.meta.env.VITE_ADMIN_PASSWORD || 'transapp123'
+  username: import.meta.env.VITE_ADMIN_USERNAME,
+  password: import.meta.env.VITE_ADMIN_PASSWORD
 }
