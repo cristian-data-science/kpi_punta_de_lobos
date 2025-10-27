@@ -23,21 +23,17 @@ const Reportes = () => {
       // Cargar todas las personas (sin paginación para análisis completo)
       const { data: personasData, error: personasError } = await getPersonas(1, 1000)
       if (!personasError && personasData) {
-        console.log('✅ Personas cargadas:', personasData.length, personasData)
         setPersonas(personasData)
       } else {
-        console.error('❌ Error cargando personas:', personasError)
-        setPersonas([]) // Fallback a array vacío
+        setPersonas([])
       }
 
       // Cargar todos los turnos
       const { data: turnosData, error: turnosError } = await getTurnos({})
       if (!turnosError && turnosData) {
-        console.log('✅ Turnos cargados:', turnosData.length, turnosData)
         setTurnos(turnosData)
       } else {
-        console.error('❌ Error cargando turnos:', turnosError)
-        setTurnos([]) // Fallback a array vacío
+        setTurnos([])
       }
 
       // Cargar resumen financiero
@@ -46,7 +42,7 @@ const Reportes = () => {
         setResumenFinanciero(finanzasData)
       }
     } catch (error) {
-      console.error('❌ Error cargando datos:', error)
+      console.error('Error cargando datos:', error)
     } finally {
       setLoading(false)
     }
@@ -488,8 +484,6 @@ const Reportes = () => {
   // Exportar Personas
   const exportarPersonas = async () => {
     try {
-      console.log('📊 Exportando personas:', personas.length, personas)
-      
       if (personas.length === 0) {
         alert('No hay personas para exportar')
         return
@@ -547,8 +541,6 @@ const Reportes = () => {
       a.download = `Personas_${new Date().toISOString().split('T')[0]}.xlsx`
       a.click()
       window.URL.revokeObjectURL(url)
-      
-      console.log('✅ Excel de personas exportado exitosamente')
     } catch (error) {
       console.error('❌ Error exportando personas:', error)
       alert('Error al exportar personas: ' + error.message)
@@ -558,9 +550,6 @@ const Reportes = () => {
   // Exportar Turnos
   const exportarTurnos = async () => {
     try {
-      console.log('📊 Exportando turnos:', turnos.length)
-      console.log('📊 Personas disponibles:', personas.length, personas)
-      
       if (turnos.length === 0) {
         alert('No hay turnos para exportar')
         return
@@ -587,7 +576,6 @@ const Reportes = () => {
       // Datos
       turnos.forEach((t, index) => {
         const persona = personas.find(p => p.id === t.persona_id)
-        console.log(`Turno ${index}: persona_id=${t.persona_id}, persona encontrada:`, persona?.nombre)
         
         const row = sheet.getRow(4 + index)
         row.values = [
@@ -623,10 +611,8 @@ const Reportes = () => {
       a.download = `Turnos_${new Date().toISOString().split('T')[0]}.xlsx`
       a.click()
       window.URL.revokeObjectURL(url)
-      
-      console.log('✅ Excel de turnos exportado exitosamente')
     } catch (error) {
-      console.error('❌ Error exportando turnos:', error)
+      console.error('Error exportando turnos:', error)
       alert('Error al exportar turnos: ' + error.message)
     }
   }
@@ -634,10 +620,6 @@ const Reportes = () => {
   // Exportar Análisis Combinado
   const exportarAnalisisCombinado = async () => {
     try {
-      console.log('📊 Exportando análisis combinado')
-      console.log('📊 Personas:', personas.length, personas)
-      console.log('📊 Turnos:', turnos.length, turnos)
-      
       if (personas.length === 0 && turnos.length === 0) {
         alert('No hay datos para exportar')
         return
@@ -662,7 +644,6 @@ const Reportes = () => {
 
       personas.forEach((p, index) => {
         const turnosPersona = turnos.filter(t => t.persona_id === p.id)
-        console.log(`Persona ${p.nombre}: ${turnosPersona.length} turnos encontrados`)
         
         const turnosCompletados = turnosPersona.filter(t => t.estado === 'completado')
         const totalHoras = turnosCompletados.reduce((sum, t) => {
@@ -714,7 +695,6 @@ const Reportes = () => {
 
       turnos.forEach((t, index) => {
         const persona = personas.find(p => p.id === t.persona_id)
-        console.log(`Turno ${index}: persona_id=${t.persona_id}, encontrada:`, persona?.nombre, persona?.tipo)
         
         const row = sheet2.getRow(4 + index)
         row.values = [
@@ -751,13 +731,9 @@ const Reportes = () => {
       a.download = `Analisis_Completo_${new Date().toISOString().split('T')[0]}.xlsx`
       a.click()
       window.URL.revokeObjectURL(url)
-      
-      console.log('✅ Excel de análisis combinado exportado exitosamente')
     } catch (error) {
-      console.error('❌ Error exportando análisis combinado:', error)
-      alert('Error al exportar análisis combinado: ' + error.message)
       console.error('Error exportando análisis combinado:', error)
-      alert('Error al exportar análisis combinado')
+      alert('Error al exportar análisis combinado: ' + error.message)
     }
   }
 
