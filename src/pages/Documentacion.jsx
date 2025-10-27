@@ -1236,6 +1236,202 @@ pnpm lint         # Ejecutar ESLint`}
               </ul>
             </div>
 
+            {/* Estructura del Proyecto */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">📁 Estructura del Proyecto</h3>
+              <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-sm">
+{`kpi/
+├── src/
+│   ├── components/          # Componentes reutilizables
+│   │   ├── ui/             # Componentes UI (shadcn/ui)
+│   │   ├── Header.jsx
+│   │   ├── Sidebar.jsx
+│   │   └── Layout.jsx
+│   ├── contexts/            # Contextos de React
+│   │   └── AuthContext.jsx
+│   ├── pages/              # Páginas de la aplicación
+│   │   ├── Login.jsx
+│   │   ├── Dashboard.jsx
+│   │   ├── Personas.jsx
+│   │   └── ...
+│   ├── services/           # Servicios y API
+│   ├── config/             # Configuraciones
+│   ├── hooks/              # Custom hooks
+│   └── utils/              # Funciones auxiliares
+├── config/                 # Archivos de configuración
+├── docs/                   # Documentación
+├── scripts/                # Scripts de utilidades
+├── sql/                    # Scripts SQL
+└── public/                 # Assets estáticos`}
+              </pre>
+            </div>
+
+            {/* Configuración de Base de Datos */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">🗄️ Configurar Base de Datos</h3>
+              <ul className="space-y-2">
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Crea un proyecto en Supabase
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Ve a SQL Editor en el dashboard
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Ejecuta el script sql/puntadelobos_setup.sql
+                </li>
+              </ul>
+              <p className="text-sm text-gray-600 mt-3 mb-2">Scripts automatizados:</p>
+              <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-sm">
+{`# PowerShell (Windows)
+.\\scripts\\setup-supabase.ps1
+
+# Bash (Linux/Mac)
+bash scripts/build.sh`}
+              </pre>
+            </div>
+
+            {/* Despliegue */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">🚀 Despliegue</h3>
+              <p className="text-sm text-gray-600 mb-2">Vercel (Recomendado):</p>
+              <ul className="space-y-2 mb-3">
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Conecta tu repositorio a Vercel
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Configura las variables de entorno en Vercel Dashboard
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Deploy automático en cada push
+                </li>
+              </ul>
+              <p className="text-sm text-gray-600 mb-2">Build para producción:</p>
+              <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-sm">
+{`pnpm build
+pnpm preview  # Vista previa del build`}
+              </pre>
+            </div>
+
+            {/* Checklist de Seguridad */}
+            <div className="bg-yellow-50 border-l-4 border-yellow-600 p-3 rounded-r-lg">
+              <h3 className="font-semibold text-base text-yellow-900 mb-2">⚠️ Checklist de Seguridad</h3>
+              <p className="text-sm text-yellow-800 mb-2">Antes de hacer push a un repositorio público:</p>
+              <ul className="space-y-2">
+                <li className="flex items-start gap-2 text-sm text-yellow-800">
+                  <div className="w-2 h-2 bg-yellow-600 rounded-full mt-1.5"></div>
+                  Verificar que .env.local NO está en Git
+                </li>
+                <li className="flex items-start gap-2 text-sm text-yellow-800">
+                  <div className="w-2 h-2 bg-yellow-600 rounded-full mt-1.5"></div>
+                  Verificar que mcp.json NO está en Git
+                </li>
+                <li className="flex items-start gap-2 text-sm text-yellow-800">
+                  <div className="w-2 h-2 bg-yellow-600 rounded-full mt-1.5"></div>
+                  Buscar credenciales hardcodeadas (no debe haber JWTs)
+                </li>
+                <li className="flex items-start gap-2 text-sm text-yellow-800">
+                  <div className="w-2 h-2 bg-yellow-600 rounded-full mt-1.5"></div>
+                  Verificar que .gitignore incluye archivos sensibles
+                </li>
+                <li className="flex items-start gap-2 text-sm text-yellow-800">
+                  <div className="w-2 h-2 bg-yellow-600 rounded-full mt-1.5"></div>
+                  Cambiar contraseñas por defecto
+                </li>
+              </ul>
+            </div>
+
+            {/* Contribuir */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">🤝 Contribuir</h3>
+              <p className="text-sm text-gray-600 mb-2">Las contribuciones son bienvenidas:</p>
+              <ul className="space-y-2">
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Fork el proyecto
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Crea una rama para tu feature (git checkout -b feature/AmazingFeature)
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Commit tus cambios (git commit -m 'Add some AmazingFeature')
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Push a la rama (git push origin feature/AmazingFeature)
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-teal-600 rounded-full mt-1.5"></div>
+                  Abre un Pull Request
+                </li>
+              </ul>
+            </div>
+
+            {/* Documentación */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">📚 Documentación</h3>
+              <ul className="space-y-2">
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-blue-600 rounded-full mt-1.5"></div>
+                  Manual de Usuario - Guía completa para usuarios finales
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-blue-600 rounded-full mt-1.5"></div>
+                  Documentación Técnica - Para desarrolladores
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-blue-600 rounded-full mt-1.5"></div>
+                  Changelog - Historial de cambios
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-blue-600 rounded-full mt-1.5"></div>
+                  Guías de Usuario - Tutoriales paso a paso
+                </li>
+              </ul>
+            </div>
+
+            {/* Tecnologías */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">💻 Tecnologías</h3>
+              <ul className="space-y-2">
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full mt-1.5"></div>
+                  React - react.dev
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full mt-1.5"></div>
+                  Vite - vitejs.dev
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full mt-1.5"></div>
+                  Supabase - supabase.com
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full mt-1.5"></div>
+                  shadcn/ui - ui.shadcn.com
+                </li>
+                <li className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full mt-1.5"></div>
+                  Tailwind CSS - tailwindcss.com
+                </li>
+              </ul>
+            </div>
+
+            {/* Licencia */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">📄 Licencia</h3>
+              <p className="text-sm text-gray-600">
+                Este proyecto está bajo la Licencia MIT - ver el archivo LICENSE para más detalles.
+              </p>
+            </div>
+
             {/* Agradecimientos */}
             <div className="border-t border-gray-200 pt-3">
               <h3 className="font-semibold text-base mb-2">🙏 Agradecimientos</h3>
