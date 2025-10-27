@@ -1011,45 +1011,29 @@ import { Button } from '@/components/ui/button'
       ))}
 
       {/* README del Proyecto - Desplegable */}
-      <Card 
-        className={`border-2 transition-all duration-300 cursor-pointer hover:shadow-xl mt-6 ${
-          moduloExpandido === 'readme' 
-            ? 'shadow-xl bg-gradient-to-br from-purple-500 to-indigo-600' 
-            : 'border-gray-200 shadow-lg hover:border-purple-300'
-        }`}
-        onClick={() => toggleModulo('readme')}
-      >
-        <CardHeader className={`${moduloExpandido !== 'readme' ? 'p-0' : ''}`}>
-          <div className={`flex items-center justify-between ${moduloExpandido !== 'readme' ? 'p-6 m-0' : ''}`}>
+      <Card className={`overflow-hidden ${moduloExpandido === 'readme' ? 'bg-gradient-to-br from-purple-500 to-indigo-600' : ''} ${moduloExpandido !== 'readme' ? 'p-0' : ''}`}>
+        <CardHeader 
+          className={`bg-gradient-to-r from-purple-500 to-indigo-600 text-white cursor-pointer ${moduloExpandido !== 'readme' ? 'm-0' : ''}`}
+          onClick={() => toggleModulo('readme')}
+        >
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${
-                moduloExpandido === 'readme'
-                  ? 'bg-white/20'
-                  : 'bg-gradient-to-br from-purple-500 to-indigo-600'
-              }`}>
-                <Github className={`h-6 w-6 ${moduloExpandido === 'readme' ? 'text-white' : 'text-white'}`} />
-              </div>
+              <Github className="h-6 w-6" />
               <div>
-                <CardTitle className={`text-base mb-2 ${
-                  moduloExpandido === 'readme' ? 'text-white' : 'text-gray-900'
-                }`}>
-                  README del Proyecto
-                </CardTitle>
-                {moduloExpandido !== 'readme' && (
-                  <p className="text-sm text-gray-600">Documentación completa del repositorio</p>
-                )}
+                <CardTitle>README del Proyecto</CardTitle>
+                <CardDescription className="text-white/80">Documentación completa del repositorio</CardDescription>
               </div>
             </div>
             {moduloExpandido === 'readme' ? (
-              <ChevronDown className="h-5 w-5 text-white" />
+              <ChevronDown className="h-5 w-5" />
             ) : (
-              <ChevronRight className="h-5 w-5 text-gray-400" />
+              <ChevronRight className="h-5 w-5" />
             )}
           </div>
         </CardHeader>
 
         {moduloExpandido === 'readme' && (
-          <CardContent className="bg-white rounded-b-lg p-6 space-y-4">
+          <CardContent className="pt-6 space-y-4 bg-white/95 backdrop-blur-sm">
             {/* Header */}
             <div className="border-b border-gray-200 pb-3 mb-3">
               <h1 className="text-base font-bold text-gray-900 mb-2 flex items-center gap-2">
