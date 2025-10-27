@@ -320,19 +320,6 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-purple-900">Tasa Asistencia</CardTitle>
-            <Target className="h-5 w-5 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-purple-900">{stats.tasaAsistencia}%</div>
-            <p className="text-xs text-purple-700 mt-2">
-              {stats.turnosCompletados} completados este mes
-            </p>
-          </CardContent>
-        </Card>
-
         <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-orange-900">Promedio Diario</CardTitle>
@@ -346,7 +333,7 @@ const Dashboard = () => {
       </div>
 
       {/* Estadísticas Detalladas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-medium text-gray-700">Esta Semana</CardTitle>
@@ -377,28 +364,6 @@ const Dashboard = () => {
           <CardContent>
             <div className="text-2xl font-bold text-blue-700">{stats.turnosProgramados}</div>
             <p className="text-xs text-gray-500">pendientes</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium text-gray-700">Ausencias</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-700">{stats.turnosAusentes}</div>
-            <p className="text-xs text-gray-500">este mes</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-medium text-gray-700">Cancelados</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-700">{stats.turnosCancelados}</div>
-            <p className="text-xs text-gray-500">este mes</p>
           </CardContent>
         </Card>
       </div>
@@ -545,50 +510,6 @@ const Dashboard = () => {
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Distribución de Turnos por Tipo */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-purple-600" />
-            Distribución de Turnos por Tipo
-          </CardTitle>
-          <CardDescription>Análisis de turnos del mes actual</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {Object.keys(stats.turnosPorTipo).length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <TrendingUp className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-              <p>No hay datos de turnos disponibles</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {Object.entries(stats.turnosPorTipo).map(([tipo, cantidad]) => {
-                const porcentaje = ((cantidad / stats.turnosMesActual) * 100).toFixed(1)
-                const tipoLabels = {
-                  completo: { label: 'Completo', color: 'from-blue-500 to-cyan-500', bg: 'bg-blue-50', text: 'text-blue-900' },
-                  medio: { label: 'Medio Día', color: 'from-green-500 to-emerald-500', bg: 'bg-green-50', text: 'text-green-900' },
-                  parcial: { label: 'Parcial', color: 'from-purple-500 to-pink-500', bg: 'bg-purple-50', text: 'text-purple-900' },
-                  nocturno: { label: 'Nocturno', color: 'from-indigo-500 to-blue-500', bg: 'bg-indigo-50', text: 'text-indigo-900' },
-                  sin_tipo: { label: 'Sin Tipo', color: 'from-gray-500 to-slate-500', bg: 'bg-gray-50', text: 'text-gray-900' }
-                }
-                const tipoInfo = tipoLabels[tipo] || tipoLabels.sin_tipo
-                
-                return (
-                  <Card key={tipo} className={`${tipoInfo.bg} border-none`}>
-                    <CardContent className="pt-6">
-                      <div className={`w-full h-2 bg-gradient-to-r ${tipoInfo.color} rounded-full mb-3`}></div>
-                      <p className="text-xs font-medium text-gray-600 uppercase">{tipoInfo.label}</p>
-                      <div className={`text-2xl font-bold ${tipoInfo.text} mt-1`}>{cantidad}</div>
-                      <p className="text-xs text-gray-500 mt-1">{porcentaje}% del total</p>
-                    </CardContent>
-                  </Card>
-                )
-              })}
             </div>
           )}
         </CardContent>
