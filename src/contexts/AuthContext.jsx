@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { LOGIN_CONFIG, VALID_CREDENTIALS } from '@/config/loginConfig'
+import { getSupabaseClient } from '@/services/supabaseClient'
 
 const AuthContext = createContext()
 
@@ -86,10 +87,45 @@ export const AuthProvider = ({ children }) => {
     setLockoutEndTime(null)
   }
 
-  const login = (username, password) => {
+  // Función para validar credenciales contra Supabase
+  const validateCredentials = async (username, password) => {
+    try {
+      const supabase = getSupabaseClient()
+      
+      // 1. Intentar obtener credenciales desde Supabase
+      const { data: passwordData, error: passwordError } = await supabase
+        .from('app_config')
+        .select('config_value')
+        .eq('config_key', 'admin_password')
+        .single()
+
+      const { data: usernameData, error: usernameError } = await supabase
+        .from('app_config')
+        .select('config_value')
+        .eq('config_key', 'admin_username')
+        .single()
+
+      // Si hay error o no hay datos, usar credenciales de variables de entorno como fallback
+      if (passwordError || usernameError || !passwordData || !usernameData) {
+        console.warn('Usando credenciales de fallback desde variables de entorno')
+        return username === VALID_CREDENTIALS.username && password === VALID_CREDENTIALS.password
+      }
+
+      // 2. Validar con credenciales de Supabase
+      return username === usernameData.config_value && password === passwordData.config_value
+
+    } catch (error) {
+      console.error('Error al validar credenciales:', error)
+      // En caso de error, usar credenciales de variables de entorno como fallback
+      return username === VALID_CREDENTIALS.username && password === VALID_CREDENTIALS.password
+    }
+  }
+
+  const login = async (username, password) => {
     // Si el sistema de límite de intentos está desactivado, usar login normal
     if (!LOGIN_CONFIG.loginAttemptsEnabled) {
-      if (username === VALID_CREDENTIALS.username && password === VALID_CREDENTIALS.password) {
+      const isValid = await validateCredentials(username, password)
+      if (isValid) {
         setIsAuthenticated(true)
         localStorage.setItem('transapp-auth', 'authenticated')
         return { success: true }
@@ -111,7 +147,8 @@ export const AuthProvider = ({ children }) => {
     }
 
     // Verificar credenciales
-    if (username === VALID_CREDENTIALS.username && password === VALID_CREDENTIALS.password) {
+    const isValid = await validateCredentials(username, password)
+    if (isValid) {
       // Login exitoso
       setIsAuthenticated(true)
       localStorage.setItem('transapp-auth', 'authenticated')

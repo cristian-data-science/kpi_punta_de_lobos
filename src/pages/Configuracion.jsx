@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Settings, Database, Lock, Bell, Palette } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import PasswordChangeCard from '@/components/PasswordChangeCard'
 
 const Configuracion = () => {
   return (
@@ -9,6 +10,9 @@ const Configuracion = () => {
         <h1 className="text-3xl font-bold text-gray-900">Configuración</h1>
         <p className="text-gray-600 mt-2">Ajustes y preferencias del sistema</p>
       </div>
+
+      {/* Sección de Cambio de Contraseña */}
+      <PasswordChangeCard />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
